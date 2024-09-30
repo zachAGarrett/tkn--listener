@@ -2,13 +2,13 @@ export interface TokenBank {
   [k: string]: number[];
 }
 
-export async function ingestString(input: string, persistentBank?: TokenBank) {
+export async function ingestString(input: string, knownTokens?: TokenBank) {
   const segmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 
   const graphemes = segmenter.segment(input);
 
   let window: string = "";
-  let bank: TokenBank = { ...persistentBank } || {};
+  let bank: TokenBank = { ...knownTokens } || {};
 
   for (const { segment, index } of graphemes) {
     const tkn = window + segment;

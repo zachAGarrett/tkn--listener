@@ -1,70 +1,52 @@
-import { convert } from "html-to-text";
+import { ingestString, TokenBank } from "../../../lib/ingest/string/index.js";
+import { getWikipediaArticle } from "./getArticle.js";
+import { calculateCycleGrowth, profileTokenBank } from "../../../util/math.js";
 
-export async function getWikipediaArticle(title: string): Promise<string> {
-  const baseUrl = "https://en.wikipedia.org/w/api.php";
-
-  // Fetch the sections of the article first
-  const sectionsUrl = `${baseUrl}?action=parse&page=${encodeURIComponent(
-    title
-  )}&format=json&prop=sections`;
-
-  try {
-    const sectionsResponse = await fetch(sectionsUrl);
-
-    if (!sectionsResponse.ok) {
-      throw new Error(
-        `Error fetching sections: ${sectionsResponse.statusText}`
-      );
-    }
-
-    const sectionsData = await sectionsResponse.json();
-
-    // Check if the 'parse' property is present
-    if (!sectionsData.parse || !sectionsData.parse.sections) {
-      throw new Error("No sections found for this article.");
-    }
-
-    // Fetch content for each section
-    const sections = sectionsData.parse.sections;
-    const allSectionsContent: string[] = [];
-
-    for (const section of sections) {
-      const sectionTitle = section.line;
-      const sectionIndex = section.index;
-
-      // Fetch content for the specific section
-      const contentUrl = `${baseUrl}?action=parse&page=${encodeURIComponent(
-        title
-      )}&format=json&prop=text&section=${sectionIndex}`;
-
-      const contentResponse = await fetch(contentUrl);
-      if (!contentResponse.ok) {
-        throw new Error(
-          `Error fetching section ${sectionTitle}: ${contentResponse.statusText}`
-        );
-      }
-
-      const contentData = await contentResponse.json();
-      if (
-        !contentData.parse ||
-        !contentData.parse.text ||
-        !contentData.parse.text["*"]
-      ) {
-        throw new Error(`Content for section ${sectionTitle} not available.`);
-      }
-
-      // Convert HTML to plain text and add to the array
-      const htmlContent = contentData.parse.text["*"];
-      const plainText = convert(htmlContent);
-      allSectionsContent.push(`${sectionTitle}:\n${plainText}\n`);
-    }
-
-    // Join all sections content with double line breaks
-    return allSectionsContent.join("\n\n");
-  } catch (error) {
-    console.error(
-      `Failed to fetch Wikipedia article: ${(error as any).message}`
-    );
-    throw error;
-  }
+export interface IngestWikipediaArticleProps {
+  title: string;
+  maxCycles: number;
+  growthRateCutoff: number;
+  knownTokens: TokenBank;
+  verbose?: boolean;
 }
+export const ingestWikipediaArticle = async ({
+  title,
+  maxCycles,
+  growthRateCutoff,
+  knownTokens,
+  verbose = false,
+}: IngestWikipediaArticleProps) => {
+  const timers = ["Retrieved article in", "Ingested article in"];
+
+  verbose && console.time(timers[0]);
+  const textContent = await getWikipediaArticle(title);
+  verbose && console.timeEnd(timers[0]);
+
+  let cycle = maxCycles;
+  let tokenBank: TokenBank = { ...knownTokens } || {};
+  let growthOverCycle: number = Infinity;
+  let profile: ReturnType<typeof profileTokenBank> | undefined = undefined;
+
+  while (cycle > 0 && growthOverCycle > growthRateCutoff) {
+    verbose && console.time(timers[1]);
+    const results = await ingestString(textContent, tokenBank);
+    verbose && console.timeEnd(timers[1]);
+
+    profile = profileTokenBank(results);
+    growthOverCycle = calculateCycleGrowth(tokenBank, results);
+
+    verbose &&
+      console.log(
+        `Results after cycle ${maxCycles - cycle}:`,
+        `Growth over cycle: ${Math.round(growthOverCycle)}%`,
+        JSON.stringify(profile, undefined, 2)
+      );
+
+    tokenBank = results;
+    cycle = cycle - 1;
+  }
+
+  verbose && console.log(`Elapsed cycles: ${maxCycles - cycle}`);
+
+  return tokenBank;
+};
