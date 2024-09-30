@@ -1,8 +1,8 @@
-import { TokenBank } from "@/lib/ingest/string/index.js";
+import { TokenBank } from "../../../lib/ingest/string/index.js";
 import { max, mean, std } from "mathjs";
 
 export const profileTokenBank = (tokenBank: TokenBank) => {
-  const tkns = Object.keys(tokenBank);
+  const tkns = Array.from(tokenBank.keys());
   const tknLengths = tkns.map((k) => k.length);
 
   const profile = {
@@ -15,22 +15,9 @@ export const profileTokenBank = (tokenBank: TokenBank) => {
   return profile;
 };
 
-export const calculateCycleGrowth = (
-  previousBank: TokenBank,
-  currentBank: TokenBank
-) => {
-  const previouslyKnownTokenSetSize = Object.keys(previousBank).length;
-  const resultingTokenSetSize = Object.keys(currentBank).length;
-  return (
-    ((resultingTokenSetSize - previouslyKnownTokenSetSize) /
-      previouslyKnownTokenSetSize) *
-    100
-  );
-};
-
 export function trimTokenBank(tokenBank: TokenBank): TokenBank {
   // Get all tokens
-  const tokens = Object.keys(tokenBank);
+  const tokens = Array.from(tokenBank.keys());
 
   // Calculate token lengths
   const tokenLengths = tokens.map((token) => token.length);
@@ -43,11 +30,11 @@ export function trimTokenBank(tokenBank: TokenBank): TokenBank {
   const cutoffLength = meanLength + Number(stdDevLength);
 
   // Create a new TokenBank with trimmed tokens
-  const trimmedTokenBank: TokenBank = {};
+  const trimmedTokenBank: TokenBank = new Map();
 
   for (const token of tokens) {
     if (token.length <= cutoffLength) {
-      trimmedTokenBank[token] = tokenBank[token];
+      trimmedTokenBank.set(token, tokenBank.get(token)!);
     }
   }
 

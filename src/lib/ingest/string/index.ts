@@ -1,22 +1,22 @@
-export interface TokenBank {
-  [k: string]: number[];
-}
+export type TokenBank = Map<string, number[]>;
 
-export async function ingestString(input: string, knownTokens?: TokenBank) {
+export async function ingestString(
+  input: string,
+  knownTokens?: TokenBank
+): Promise<TokenBank> {
   const segmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
-
   const graphemes = segmenter.segment(input);
 
   let window: string = "";
-  let bank: TokenBank = { ...knownTokens } || {};
+  let bank: TokenBank = new Map(knownTokens);
 
   for (const { segment, index } of graphemes) {
     const tkn = window + segment;
-    if (bank.hasOwnProperty(tkn)) {
-      bank[tkn] = [...bank[tkn], index];
+    if (bank.has(tkn)) {
+      bank.get(tkn)!.push(index);
       window = tkn;
     } else {
-      bank[tkn] = [index];
+      bank.set(tkn, [index]);
       window = "";
     }
   }

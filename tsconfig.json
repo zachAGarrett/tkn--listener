@@ -14,11 +14,8 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "outDir": "build",
-    "preserveConstEnums": true,
-    "paths": {
-      "@/*": ["./src/*"]
-    }
+    "preserveConstEnums": true
   },
-  "include": ["**/*.ts"],
+  "include": ["./src/**/*.ts"],
   "exclude": ["node_modules"]
 }
