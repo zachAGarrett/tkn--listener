@@ -1,17 +1,22 @@
 import { TokenBank } from "./lib/ingest/string/index.js";
 import { ingestWikipediaArticle } from "./lib/sources/wikipedia/index.js";
+import { profileTokenBank, trimTokenBank } from "./util/math.js";
 
-const articles = ["API"];
+const articles = ["Operator_algebra", "API"];
 
-let knownTokens: TokenBank = {};
+let memory: TokenBank = {};
 
 for (const article of articles) {
   const results = await ingestWikipediaArticle({
     title: article,
     maxCycles: 40,
     growthRateCutoff: 20,
-    knownTokens,
+    knownTokens: memory,
     verbose: true,
   });
-  knownTokens = results;
+
+  const trimmedMemory = trimTokenBank(results);
+  console.log(profileTokenBank(trimmedMemory));
+
+  memory = trimmedMemory;
 }
