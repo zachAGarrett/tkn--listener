@@ -1,4 +1,4 @@
-export type TokenBank = Map<string, number[]>;
+export type TokenBank = Map<string, string>;
 
 export async function ingestString(
   input: string,
@@ -12,11 +12,12 @@ export async function ingestString(
 
   for (const { segment, index } of graphemes) {
     const tkn = window + segment;
-    if (bank.has(tkn)) {
-      bank.get(tkn)!.push(index);
+    const existingIndices = bank.get(tkn);
+    if (existingIndices) {
       window = tkn;
     } else {
-      bank.set(tkn, [index]);
+      bank.set(tkn, String(index));
+      bank.set(window, existingIndices + "|" + String(index));
       window = "";
     }
   }

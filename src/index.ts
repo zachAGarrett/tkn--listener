@@ -16,7 +16,7 @@ for (const article of articles) {
   });
 
   const trimmedMemory = trimTokenBank(results);
-  console.log(profileTokenBank(trimmedMemory));
+  console.log("Bank:", profileTokenBank(trimmedMemory));
 
   memory = trimmedMemory;
 }
