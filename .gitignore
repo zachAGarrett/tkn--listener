@@ -1,8 +1,10 @@
 node_modules
 
-build
+/build
 
 *.tsbuildinfo
 
 
-files
+/files
+
+.env

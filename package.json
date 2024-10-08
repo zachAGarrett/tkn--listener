@@ -10,11 +10,12 @@
     "build": "npm run clean && tsc",
     "start": "node build/index.js",
     "watch": "tsc --watch",
-    "collect": "node ./src/util/build/collectFiles.js ./src ./files"
+    "collect": "node build/util/build/collectFiles.js ./src ./files '**/*.ts'"
   },
   "author": "Zach Garrett",
   "license": "ISC",
   "dependencies": {
+    "dotenv": "^16.4.5",
     "html-to-text": "^9.0.5",
     "mathjs": "^13.1.1",
     "neo4j-driver": "^5.25.0",
@@ -22,6 +23,7 @@
   },
   "devDependencies": {
     "@types/html-to-text": "^9.0.4",
-    "@types/node": "^22.7.4"
+    "@types/node": "^22.7.4",
+    "glob": "^11.0.0"
   }
 }
