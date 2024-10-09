@@ -10,20 +10,25 @@
     "build": "npm run clean && tsc",
     "start": "node build/index.js",
     "watch": "tsc --watch",
-    "collect": "node build/util/build/collectFiles.js ./src ./files '**/*.ts'"
+    "assistant:chat": "node build/util/build/codeAssistant/cli/index.js ./src \"**/*.ts\"",
+    "assistant:watch_files": "node build/util/build/codeAssistant/watchFiles/index.js ./src \"**/*.ts\""
   },
   "author": "Zach Garrett",
   "license": "ISC",
   "dependencies": {
     "dotenv": "^16.4.5",
+    "glob-watcher": "^6.0.0",
     "html-to-text": "^9.0.5",
     "mathjs": "^13.1.1",
     "neo4j-driver": "^5.25.0",
+    "openai": "^4.67.3",
     "typescript": "^5.6.2"
   },
   "devDependencies": {
+    "@types/glob-watcher": "^5.0.5",
     "@types/html-to-text": "^9.0.4",
     "@types/node": "^22.7.4",
+    "form-data": "^4.0.0",
     "glob": "^11.0.0"
   }
 }
