@@ -1,7 +1,12 @@
 import OpenAI from "openai";
-import { createThread, findOrCreateAssistant } from "./util.js";
+import {
+  createThread,
+  findOrCreateAssistant,
+  getResponse,
+  purgeFiles,
+} from "./util.js";
 import { createInterface } from "readline";
-import watchAndSyncFiles from "../watchFiles/util.js";
+import watchAndSyncFiles from "../watchFiles/index.js";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || "",
@@ -9,69 +14,95 @@ const openai = new OpenAI({
   project: process.env.OPENAI_PROJECT_ID || "",
 });
 
-const [sourceDir, globPattern, purpose] = process.argv.slice(2);
+type Args = [
+  sourceDir: string,
+  globPattern: string,
+  purpose?: OpenAI.FilePurpose,
+  model?: OpenAI.ChatModel
+];
+
+// Validate and destructure command line arguments
+const [sourceDir, globPattern, purpose, model] = process.argv.slice(2) as Args;
 
 if (!sourceDir || !globPattern) {
   console.error("Please provide source directory and glob pattern.");
   process.exit(1);
 }
 
-const vectorStoreId = await watchAndSyncFiles(
-  sourceDir,
-  globPattern,
-  (purpose as OpenAI.FilePurpose) || "assistants"
-);
+// Initialize synchronization and vector store
+const { syncing: initialSyncing, vectorStoreId: initialVectorStoreId } =
+  await watchAndSyncFiles({
+    sourceDir,
+    globPattern,
+    purpose,
+  });
 
-const trackedFiles = await openai.beta.vectorStores.files.list(vectorStoreId);
-const fileIds = trackedFiles.data.map((file) => file.id);
-console.log(fileIds);
-const fileNames = await Promise.all(
-  fileIds.map((fileId) =>
-    openai.files.retrieve(fileId).then((file) => file.filename)
-  )
-);
-console.log(fileNames);
+// Use state to monitor syncing status and vector store ID
+let syncing = initialSyncing;
+let vectorStoreId = initialVectorStoreId;
 
-const assistantCreateParams: OpenAI.Beta.AssistantCreateParams = {
+async function monitorSyncState() {
+  syncing = initialSyncing;
+  vectorStoreId = initialVectorStoreId; // Update logic as needed
+}
+
+// Continuously check synchronization state
+setInterval(monitorSyncState, 1000);
+
+// Setup the assistant for handling requests
+const assistant = await findOrCreateAssistant(openai, {
   name: "Programming assistant",
   description: "Helps with coding-related queries and tasks.",
   instructions:
     "You are an expert software engineer who provides code that meets the functional requirements.",
-  model: "gpt-4o",
+  model: model || "gpt-4o-mini",
   tools: [{ type: "file_search" }],
-};
+});
 
-const threadCreateParams: OpenAI.Beta.ThreadCreateParams = {
+// Create a conversation thread
+const thread = await createThread(openai, {
   tool_resources: { file_search: { vector_store_ids: [vectorStoreId] } },
-};
+});
 
-const assistant = await findOrCreateAssistant(openai, assistantCreateParams);
-
-const thread = await createThread(openai, threadCreateParams);
-
+// Setup readline interface for user input
 const rl = createInterface({
   input: process.stdin,
   output: process.stdout,
 });
 
+// Function to handle command prompt interaction
 function promptQuestion() {
-  rl.question("You: ", async (question) => {
-    await openai.beta.threads.messages.create(thread.id, {
-      role: "user",
-      content: question,
-    });
+  if (syncing) {
+    // Inform the user of file synchronization
+    console.log("Currently syncing files, please wait...");
+    setTimeout(promptQuestion, 1000);
+    return;
+  }
 
-    const run = await openai.beta.threads.runs.createAndPoll(thread.id, {
-      assistant_id: assistant.id,
-    });
-    if (run.status === "completed") {
-      const messagesPage = await openai.beta.threads.messages.list(thread.id);
-      const lastMessage = messagesPage.data[0].content[0];
-      console.log(lastMessage.type === "text" && lastMessage.text);
+  // Capture user input
+  rl.question("> ", async (question) => {
+    try {
+      if (question === "$purge") {
+        await purgeFiles({ openai });
+      } else {
+        const { responseContent, codeBlocks } = await getResponse({
+          openai,
+          threadId: thread.id,
+          question,
+          assistantId: assistant.id,
+        });
+        console.log(responseContent);
+
+        Array.isArray(codeBlocks) &&
+          codeBlocks.map((code) => console.log(code));
+      }
+    } catch (error) {
+      console.error("An error occurred: ", error);
+    } finally {
+      promptQuestion();
     }
-
-    promptQuestion(); // Recursively ask for the next input
   });
 }
 
+// Begin prompting the user for questions
 promptQuestion();
