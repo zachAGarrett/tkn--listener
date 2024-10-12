@@ -13,19 +13,21 @@ export async function ingestString(
   let window: string = "";
   let bank: TokenBank = new Map(knownTokens);
   let currentIndex: number = 0;
+  let windowStartindex: number = 0;
   let newTokenCount: number = 0;
 
   process.env.VERBOSE && console.time(timers[1]);
   for (const { segment, index } of graphemes) {
     const tkn = window + segment;
     const existingIndices = bank.get(tkn);
-    if (existingIndices) {
+    if (existingIndices !== undefined) {
       window = tkn;
     } else {
-      bank.set(tkn, String(index));
-      bank.set(window, existingIndices + "|" + String(index));
-      window = "";
+      bank.set(tkn, "");
+      bank.set(window, bank.get(window) + "|" + String(windowStartindex));
+      window = segment;
       newTokenCount += 1;
+      windowStartindex = index;
     }
     currentIndex += 1;
   }

@@ -118,15 +118,19 @@ export function trimTokenBank({
 /**
  * Class to maintain running statistics (mean, variance, standard deviation) dynamically.
  */
-class RunningStats {
+export class RunningStats {
   private n: number; // Number of elements
   private mean: number; // Mean of elements
   private M2: number; // Sum of squares of differences from the current mean
+  private nullCount: number; // Number of empty values in the set
+  private max: number; // Maximum occurences
 
   constructor() {
     this.n = 0;
     this.mean = 0;
     this.M2 = 0;
+    this.nullCount = 0;
+    this.max = 0;
   }
 
   /**
@@ -139,6 +143,12 @@ class RunningStats {
     this.mean += delta / this.n;
     const delta2 = x - this.mean;
     this.M2 += delta * delta2;
+    if (x === 0) {
+      this.nullCount += 1;
+    }
+    if (x > this.max) {
+      this.max = x;
+    }
   }
 
   /**
@@ -147,6 +157,22 @@ class RunningStats {
    */
   getMean(): number {
     return this.mean;
+  }
+
+  /**
+   * Gets the current max of the values.
+   * @returns The max.
+   */
+  getMax(): number {
+    return this.max;
+  }
+
+  /**
+   * Gets the current number of the values with a value equal to zero.
+   * @returns The null count.
+   */
+  getNullCount(): number {
+    return this.nullCount;
   }
 
   /**
