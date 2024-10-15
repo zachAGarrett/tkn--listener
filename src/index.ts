@@ -1,74 +1,55 @@
-import { TokenBank } from "./lib/ingest/string/index.js";
-import {
-  createPositionIndex,
-  encodeCorpus,
-} from "./lib/ingest/string/util.js";
+import { ingest, TokenBank } from "./lib/ingest/string/index.js";
 import neo4j, { Driver } from "neo4j-driver";
 import dotenv from "dotenv";
-import { ingestWikipediaArticle } from "./lib/sources/wikipedia/index.js";
+import { getWikipediaArticle } from "./lib/sources/wikipedia/getArticle.js";
+import { randomUUID } from "crypto";
+import chalk from "chalk";
+import pLimit from "p-limit";
+
+const limit = pLimit(4);
 
 dotenv.config();
 
-// Function to sync token bank with Neo4j
-async function syncTokenBankWithNeo4j(driver: Driver, articles: string[]) {
+async function processArticles(driver: Driver, articles: string[]) {
   let memory: TokenBank = new Map();
 
-  for (const article of articles) {
-    console.info(`Processing article: ${article}`);
+  const runs = articles.map(async (article) =>
+    limit(() =>
+      getWikipediaArticle(article, randomUUID()).then(
+        ({ runId, content: corpus }) => {
+          const runIdLog = chalk.blueBright(`[${runId}]`);
+          const { bank, newTokenCount, parsed, driftDeltas } = ingest(
+            corpus,
+            memory,
+            runId
+          );
 
-    // Ingest the article and process tokens
-    const results = await ingestWikipediaArticle({
-      title: article,
-      knownTokens: memory,
-    });
+          // process.env.VERBOSE &&
+          //   console.log(
+          //     runIdLog +
+          //       chalk.magentaBright("[CENTROIDS]") +
+          //       ": " +
+          //       chalk.white(driftDeltas)
+          //   );
+          process.env.VERBOSE &&
+            console.log(
+              runIdLog +
+                chalk.magentaBright("[TOKENS]") +
+                ": " +
+                chalk.white(
+                  `${newTokenCount} new TKNS from ${
+                    parsed.join("").length
+                  } CHARS`
+                )
+            );
 
-    // console.log(results);
+          return { bank, newTokenCount, parsed, runId };
+        }
+      )
+    )
+  );
 
-    // const bankProfileStatKeeper = new RunningStats();
-
-    const positionIndex = createPositionIndex(results);
-
-    const encodedCorpus = encodeCorpus(results, positionIndex);
-
-    console.log("Corpus encoding", encodedCorpus);
-
-    // let adjacentTokenCount = 0;
-    // (() => {
-    //   for (const currentIndex of Array.from(positionIndex.keys()).sort(
-    //     (a, b) => a - b
-    //   )) {
-    //     const currentToken = positionIndex.get(currentIndex)!;
-    //     const nextTokenIndex = currentIndex + currentToken.length;
-    //     const nextToken = positionIndex.get(nextTokenIndex);
-    //     if (nextToken !== undefined) {
-    //       // store adjacent values
-    //       adjacentTokenCount += 1;
-    //       // console.log(
-    //       //   `${currentIndex} : ${currentToken} -> ${nextTokenIndex} : ${nextToken}`
-    //       // );
-    //     } else {
-    //       // store hanging values
-    //       // console.log(`${index} : ${value}`);
-    //     }
-    //   }
-    // })();
-    // console.log(
-    //   "Tokens with adjacency : ",
-    //   String((adjacentTokenCount / positionIndex.size) * 100).slice(0, 5) + "%"
-    // );
-
-    // const bankProfile = {
-    //   meanOccurences: bankProfileStatKeeper.getMean(),
-    //   occuranceVariance: bankProfileStatKeeper.getVariance(),
-    //   STDOfOccurences: bankProfileStatKeeper.getStandardDeviation(),
-    //   singleOccurancePercent:
-    //     String(
-    //       (bankProfileStatKeeper.getNullCount() / results.size) * 100
-    //     ).slice(0, 5) + "%",
-    //   maximumOccurences: bankProfileStatKeeper.getMax(),
-    // };
-    // console.log(bankProfile);
-  }
+  return await Promise.all(runs);
 }
 
 async function main() {
@@ -76,10 +57,14 @@ async function main() {
     process.env.NEOURI!,
     neo4j.auth.basic(process.env.NEOUSER!, process.env.NEOPASS!)
   );
-  const articles = ["Operator_algebra"];
+  const articles = [
+    "Operator_algebra",
+    //  "API",
+    // "Zach_Garrett"
+  ];
 
   try {
-    await syncTokenBankWithNeo4j(driver, articles);
+    await processArticles(driver, articles);
   } finally {
     await driver.close();
   }

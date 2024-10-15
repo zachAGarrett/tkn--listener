@@ -1,48 +1,78 @@
-export type TokenBank = Map<string, string>;
+import chalk from "chalk";
+import { cosineSimilarity } from "./util.js";
 
-export async function ingestString(
+export type TokenBank = Map<string, Array<number>>;
+export type Centroid = { values: number[] };
+
+export function ingest(
   input: string,
-  knownTokens?: TokenBank
-): Promise<TokenBank> {
-  const timers = ["Parsed graphemes", "Parsed tokens from graphemes"];
-  process.env.VERBOSE && console.time(timers[0]);
+  bank: TokenBank = new Map(),
+  runId: string
+): {
+  bank: TokenBank;
+  newTokenCount: number;
+  parsed: string[];
+  driftDeltas: number[];
+} {
+  const timer =
+    chalk.blueBright(`[${runId}]`) + chalk.magentaBright("[PARSED]");
   const segmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
   const graphemes = segmenter.segment(input);
-  process.env.VERBOSE && console.timeEnd(timers[0]);
-
+  const driftDeltas: number[] = [];
+  const parsed: string[] = [];
+  let previousCentroid: Centroid | null = null; // To store the previous centroid
   let window: string = "";
-  let bank: TokenBank = new Map(knownTokens);
-  let currentIndex: number = 0;
-  let windowStartindex: number = 0;
+  let windowStartIndex: number = 0;
   let newTokenCount: number = 0;
+  let totalWeight = 0;
 
-  process.env.VERBOSE && console.time(timers[1]);
+  process.env.VERBOSE && console.time(timer);
   for (const { segment, index } of graphemes) {
     const tkn = window + segment;
     const existingIndices = bank.get(tkn);
     if (existingIndices !== undefined) {
       window = tkn;
     } else {
-      bank.set(tkn, "");
-      bank.set(
-        window,
-        (bank.get(window) || "") + "|" + String(windowStartindex)
-      );
+      bank.set(tkn, []);
+
+      if (window !== "") {
+        const updatedIndices = [...(bank.get(window) || []), windowStartIndex];
+        bank.set(window, updatedIndices);
+
+        parsed.push(window);
+
+        // Calculate and store the centroid for the current window
+        totalWeight = totalWeight + updatedIndices.length;
+        const currentCentroid: Centroid = {
+          values: (previousCentroid?.values || []).concat(
+            updatedIndices.length / totalWeight
+          ),
+        };
+
+        // If there's a previous centroid, calculate the semantic drift
+        if (previousCentroid) {
+          const drift = cosineSimilarity(
+            previousCentroid.values,
+            currentCentroid.values
+          );
+          driftDeltas.push(drift);
+        }
+
+        // Update the previous centroid
+        previousCentroid = currentCentroid;
+      }
+
       window = segment;
       newTokenCount += 1;
-      windowStartindex = index;
+      windowStartIndex = index;
     }
-    currentIndex += 1;
   }
-  process.env.VERBOSE && console.timeEnd(timers[1]);
+  process.env.VERBOSE && console.timeEnd(timer);
 
-  process.env.VERBOSE &&
-    console.log(
-      "New tokens: " +
-        newTokenCount +
-        " | " +
-        "Graphemes Parsed: " +
-        currentIndex
-    );
-  return bank;
+  return {
+    bank,
+    newTokenCount,
+    parsed,
+    driftDeltas,
+  };
 }

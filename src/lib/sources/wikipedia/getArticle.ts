@@ -1,14 +1,23 @@
+import chalk from "chalk";
+import { randomUUID } from "crypto";
 import { convert } from "html-to-text";
 
-export async function getWikipediaArticle(title: string): Promise<string> {
+export async function getWikipediaArticle(
+  title: string,
+  runId: string = randomUUID()
+): Promise<{ runId: string; content: string }> {
   const baseUrl = "https://en.wikipedia.org/w/api.php";
-
-  // Fetch the sections of the article first
   const sectionsUrl = `${baseUrl}?action=parse&page=${encodeURIComponent(
     title
   )}&format=json&prop=sections`;
+  const logBase =
+    chalk.blueBright(`[${runId}]`) + chalk.yellowBright(`[${sectionsUrl}]`);
+  const timer = logBase + chalk.magentaBright("[RETRIEVED]");
+  process.env.VERBOSE && console.time(timer);
 
   try {
+    process.env.VERBOSE &&
+      console.log(logBase + chalk.magentaBright("[FETCHING]"));
     const sectionsResponse = await fetch(sectionsUrl);
 
     if (!sectionsResponse.ok) {
@@ -59,11 +68,16 @@ export async function getWikipediaArticle(title: string): Promise<string> {
       allSectionsContent.push(`${sectionTitle}:\n${plainText}\n`);
     }
 
+    process.env.VERBOSE && console.timeEnd(timer);
     // Join all sections content with double line breaks
-    return allSectionsContent.join("\n\n");
+    return { runId, content: allSectionsContent.join("\n\n") };
   } catch (error) {
+    process.env.VERBOSE && console.timeEnd(timer);
     console.error(
-      `Failed to fetch Wikipedia article: ${(error as any).message}`
+      chalk.blueBright(`[${runId}]`) +
+        chalk.redBright(
+          `[Failed to fetch Wikipedia article]\n${(error as any).message}`
+        )
     );
     throw error;
   }

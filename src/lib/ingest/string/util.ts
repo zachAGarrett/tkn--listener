@@ -1,120 +1,6 @@
 import { max, mean, std } from "mathjs";
 import { TokenBank } from "./index.js";
 
-// Define a type for the centrality map, which maps tokens to their centrality score
-type CentralityMap = Map<string, number>;
-
-/**
- * Profiles a TokenBank by calculating various statistics about token lengths.
- * @param tokenBank - A collection of tokens and their respective positions.
- * @returns An object containing the size of the token bank and statistics on token lengths.
- */
-export const profileTokenBank = (tokenBank: TokenBank) => {
-  const tokens = Array.from(tokenBank.keys());
-  const tokenLengths = tokens.map((token) => token.length);
-
-  return {
-    bankSize: tokens.length, // Total number of unique tokens
-    tokenLengthMean: mean(tokenLengths), // Average token length
-    tokenLengthStd: std(tokenLengths), // Standard deviation of token lengths
-    tokenLengthMax: max(tokenLengths), // Maximum token length
-  };
-};
-
-/**
- * Builds a centrality map for the given TokenBank.
- * @param tokenBank - The TokenBank to analyze.
- * @returns A map of tokens and their calculated centrality values.
- */
-function buildCentralityMap(tokenBank: TokenBank): CentralityMap {
-  // Index tokens by their positions to facilitate adjacency logic
-  const positionIndex = (() => {
-    const index = new Map<number, string>();
-    for (const [token, indicesStr] of tokenBank.entries()) {
-      const indices = indicesStr.split("|").map(Number);
-      for (const i of indices) {
-        index.set(i, token);
-      }
-    }
-    return index;
-  })();
-
-  // Build adjacency list from the position index
-  const adjacencyList = (() => {
-    const adjacency = new Map<string, Set<string>>();
-    for (const [token, indicesStr] of tokenBank.entries()) {
-      const indices = indicesStr.split("|").map(Number);
-      indices.forEach((i) => {
-        const lastToken = positionIndex.get(i - 1);
-        const nextToken = positionIndex.get(i + 1);
-        if (!adjacency.has(token)) {
-          adjacency.set(token, new Set<string>());
-        }
-        // Add adjacent tokens to the adjacency set
-        lastToken && adjacency.get(token)!.add(lastToken);
-        nextToken && adjacency.get(token)!.add(nextToken);
-      });
-    }
-    return adjacency;
-  })();
-
-  return computeCentrality(adjacencyList);
-}
-
-/**
- * Computes the centrality of each token based on its adjacency list.
- * @param adjacencyList - Mapping of tokens to their direct neighbors.
- * @returns A centrality map where each token's centrality is its adjacency size.
- */
-function computeCentrality(
-  adjacencyList: Map<string, Set<string>>
-): CentralityMap {
-  const centralityMap = new Map<string, number>();
-
-  adjacencyList.forEach((neighbors, token) => {
-    centralityMap.set(token, neighbors.size);
-  });
-
-  return centralityMap;
-}
-
-/**
- * Trims the TokenBank by removing tokens with low centrality.
- * @param tokenBank - The TokenBank to trim.
- * @returns A trimmed version of the TokenBank.
- */
-export function trimTokenBank({
-  tokenBank,
-}: {
-  tokenBank: TokenBank;
-}): TokenBank {
-  console.log("Trimming token bank");
-  console.time("Trimmed in");
-
-  const stats = new RunningStats();
-  const centralityMap = buildCentralityMap(tokenBank);
-
-  centralityMap.forEach((value) => stats.addValue(value));
-
-  const threshold = stats.getMean() + stats.getStandardDeviation();
-
-  // Filter tokens with centrality above the calculated threshold
-  const trimmedBank = new Map<string, string>(
-    [...centralityMap.entries()]
-      .filter(([, centrality]) => centrality >= threshold)
-      .map(([token]) => [token, tokenBank.get(token)!])
-  );
-
-  console.timeEnd("Trimmed in");
-  process.env.VERBOSE &&
-    console.log(
-      "Bank:",
-      JSON.stringify(profileTokenBank(trimmedBank), undefined, 2)
-    );
-
-  return trimmedBank;
-}
-
 /**
  * Class to maintain running statistics (mean, variance, standard deviation) dynamically.
  */
@@ -192,52 +78,122 @@ export class RunningStats {
   }
 }
 
-export function createPositionIndex(tokenBank: TokenBank) {
+export function buildPositionIndex(tokenBank: TokenBank) {
   const positionIndex = new Map<number, string>();
-  for (const [token, indicesStr] of tokenBank.entries()) {
-    if (indicesStr.length === 0) {
-      continue;
+  tokenBank.forEach((indices, tkn) => {
+    if (indices.length === 0) {
+      return;
     } else {
-      const indices = indicesStr.split("|").filter(Boolean).map(Number);
       for (const i of indices) {
-        positionIndex.set(i, token);
+        positionIndex.set(i, tkn);
       }
     }
-  }
+  });
   return positionIndex;
 }
 
-export function encodeCorpus(
+export function buildAdjacencyList(
   tokenBank: TokenBank,
-  positionIndex: Map<number, string>
+  positionIndex: ReturnType<typeof buildPositionIndex>
 ) {
-  const cumulativeProbability = getCumulativeProbability(tokenBank);
-  let high = 1;
-  let low = 0;
-  for (const currentIndex of Array.from(positionIndex.keys()).sort(
-    (a, b) => a - b
-  )) {
-    const range = high - low;
-    const tokenProbability =
-      tokenBank
-        .get(positionIndex.get(currentIndex)!)!
-        .split("|")
-        .filter(Boolean).length / tokenBank.size;
-
-    high = low + range * cumulativeProbability;
-    low = low + range * cumulativeProbability - tokenProbability;
+  {
+    const adjacency = new Map<string, Set<string>>();
+    tokenBank.forEach((indices, tkn) => {
+      indices.forEach((i) => {
+        const lastToken = positionIndex.get(i - 1);
+        const nextToken = positionIndex.get(i + 1);
+        if (!adjacency.has(tkn)) {
+          adjacency.set(tkn, new Set<string>());
+        }
+        // Add adjacent tokens to the adjacency set
+        lastToken && adjacency.get(tkn)!.add(lastToken);
+        nextToken && adjacency.get(tkn)!.add(nextToken);
+      });
+    });
+    return adjacency;
   }
-
-  // Return the middle of the final range as the encoded value
-  return (low + high) / 2;
 }
 
-const getCumulativeProbability = (tokenBank: TokenBank) => {
-  let cumulativeProbability = 0;
-  tokenBank.forEach(
-    (token) =>
-      (cumulativeProbability +=
-        token.split("|").slice(1).length / tokenBank.size)
-  );
-  return cumulativeProbability;
+/**
+ * Profiles a TokenBank by calculating various statistics about token lengths.
+ * @param tokenBank - A collection of tokens and their respective positions.
+ * @returns An object containing the size of the token bank and statistics on token lengths.
+ */
+export const profileTokenBank = (tokenBank: TokenBank) => {
+  const tokens = Array.from(tokenBank.keys());
+  const tokenLengths = tokens.map((token) => token.length);
+
+  return {
+    bankSize: tokens.length, // Total number of unique tokens
+    tokenLengthMean: mean(tokenLengths), // Average token length
+    tokenLengthStd: std(tokenLengths), // Standard deviation of token lengths
+    tokenLengthMax: max(tokenLengths), // Maximum token length
+  };
 };
+
+export function decode(
+  bank: TokenBank,
+  low: number,
+  high: number,
+  encodedValue: number,
+  totalTokens: number
+): string[] {
+  const decodedTokens: string[] = [];
+  let currentToken: string | undefined;
+
+  // Create a frequency map from the TokenBank
+  const frequencies = Array.from(bank.entries()).map(([token, indices]) => {
+    const tokenFrequency = indices.length;
+    return { token, frequency: tokenFrequency };
+  });
+
+  // Calculate total frequency for normalization
+  const totalFrequency = frequencies.reduce(
+    (sum, { frequency }) => sum + frequency,
+    0
+  );
+
+  while (true) {
+    let range = high - low;
+
+    // Iterate through the frequencies to find the token corresponding to the encoded value
+    let cumulativeFrequency = 0;
+    for (const { token, frequency } of frequencies) {
+      const prob = frequency / totalFrequency;
+      const upperBound = low + range * cumulativeFrequency;
+      const lowerBound = low + range * (cumulativeFrequency + prob);
+
+      if (encodedValue >= lowerBound && encodedValue < upperBound) {
+        currentToken = token;
+        decodedTokens.push(currentToken);
+
+        // Update the range based on the found token
+        high = upperBound;
+        low = lowerBound;
+
+        // Update the frequency of the token in the bank
+        bank.set(currentToken, (bank.get(currentToken) || []).slice(0, -1));
+
+        // Break to re-evaluate range for the next token
+        break;
+      }
+      cumulativeFrequency += prob;
+    }
+
+    // Stop condition (e.g., reaching a certain length or a terminating symbol)
+    if (currentToken === undefined || decodedTokens.length >= totalTokens) {
+      break;
+    }
+  }
+
+  return decodedTokens;
+}
+
+export function cosineSimilarity(vecA: number[], vecB: number[]): number {
+  const dotProduct = vecA.reduce((sum, val, idx) => sum + val * vecB[idx], 0);
+  const magnitudeA = Math.sqrt(vecA.reduce((sum, val) => sum + val * val, 0));
+  const magnitudeB = Math.sqrt(vecB.reduce((sum, val) => sum + val * val, 0));
+
+  // Return cosine similarity, ensuring no division by zero
+  return magnitudeA && magnitudeB ? dotProduct / (magnitudeA * magnitudeB) : 0;
+}
