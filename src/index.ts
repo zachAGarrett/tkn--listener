@@ -18,18 +18,15 @@ async function processArticles(driver: Driver, articles: string[]) {
       getWikipediaArticle(article, randomUUID()).then(
         ({ runId, content: corpus }) => {
           const runIdLog = chalk.blueBright(`[${runId}]`);
-          const { bank, newTokenCount, parsed, driftDeltas } = ingest(
-            corpus,
-            memory,
-            runId
-          );
+          const { bank, newTokenCount, parsed, driftDeltas, thresholds } =
+            ingest(corpus, memory, runId);
 
           // process.env.VERBOSE &&
           //   console.log(
           //     runIdLog +
           //       chalk.magentaBright("[CENTROIDS]") +
           //       ": " +
-          //       chalk.white(driftDeltas)
+          //       chalk.white(thresholds)
           //   );
           process.env.VERBOSE &&
             console.log(

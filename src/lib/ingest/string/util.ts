@@ -197,3 +197,31 @@ export function cosineSimilarity(vecA: number[], vecB: number[]): number {
   // Return cosine similarity, ensuring no division by zero
   return magnitudeA && magnitudeB ? dotProduct / (magnitudeA * magnitudeB) : 0;
 }
+
+// Dynamically adjust thresholds based on semantic drift
+export function dynamicThresholdAdjustments(
+  drift: number[],
+  windowSize: number = 5,
+  a: number = 0.5,
+  b: number = 1.5
+): { stabilizationThreshold: number; shiftThreshold: number }[] {
+  const thresholds: {
+    stabilizationThreshold: number;
+    shiftThreshold: number;
+  }[] = [];
+
+  for (let i = 0; i < drift.length; i++) {
+    const windowStart = Math.max(0, i - windowSize);
+    const windowEnd = Math.min(drift.length, i + windowSize);
+    const window = drift.slice(windowStart, windowEnd);
+
+    const variance =
+      window.reduce((sum, val) => sum + Math.pow(val, 2), 0) / window.length;
+
+    const stabilizationThreshold = Math.max(0.1, variance * a);
+    const shiftThreshold = Math.max(0.2, variance * b);
+
+    thresholds.push({ stabilizationThreshold, shiftThreshold });
+  }
+  return thresholds;
+}

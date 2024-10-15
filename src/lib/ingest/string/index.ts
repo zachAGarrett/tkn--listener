@@ -1,5 +1,5 @@
 import chalk from "chalk";
-import { cosineSimilarity } from "./util.js";
+import { cosineSimilarity, dynamicThresholdAdjustments } from "./util.js";
 
 export type TokenBank = Map<string, Array<number>>;
 export type Centroid = { values: number[] };
@@ -13,6 +13,7 @@ export function ingest(
   newTokenCount: number;
   parsed: string[];
   driftDeltas: number[];
+  thresholds: ReturnType<typeof dynamicThresholdAdjustments>;
 } {
   const timer =
     chalk.blueBright(`[${runId}]`) + chalk.magentaBright("[PARSED]");
@@ -43,19 +44,19 @@ export function ingest(
 
         // Calculate and store the centroid for the current window
         totalWeight = totalWeight + updatedIndices.length;
+        const centroidValues = parsed.map(
+          (tkn) => bank.get(tkn)!.length / totalWeight
+        );
         const currentCentroid: Centroid = {
-          values: (previousCentroid?.values || []).concat(
-            updatedIndices.length / totalWeight
-          ),
+          values: centroidValues,
         };
 
         // If there's a previous centroid, calculate the semantic drift
         if (previousCentroid) {
-          const drift = cosineSimilarity(
-            previousCentroid.values,
-            currentCentroid.values
-          );
-          driftDeltas.push(drift);
+          const delta =
+            1 -
+            cosineSimilarity(previousCentroid.values, currentCentroid.values);
+          driftDeltas.push(delta);
         }
 
         // Update the previous centroid
@@ -67,6 +68,9 @@ export function ingest(
       windowStartIndex = index;
     }
   }
+
+  const thresholds = dynamicThresholdAdjustments(driftDeltas, 5, 0.5, 1.5);
+
   process.env.VERBOSE && console.timeEnd(timer);
 
   return {
@@ -74,5 +78,6 @@ export function ingest(
     newTokenCount,
     parsed,
     driftDeltas,
+    thresholds,
   };
 }
