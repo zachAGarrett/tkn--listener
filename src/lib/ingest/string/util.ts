@@ -1,5 +1,5 @@
 import { max, mean, std } from "mathjs";
-import { TokenBank } from "./index.js";
+import { Centroid, TokenBank } from "./index.js";
 
 /**
  * Class to maintain running statistics (mean, variance, standard deviation) dynamically.
@@ -189,13 +189,19 @@ export function decode(
   return decodedTokens;
 }
 
-export function cosineSimilarity(vecA: number[], vecB: number[]): number {
-  const dotProduct = vecA.reduce((sum, val, idx) => sum + val * vecB[idx], 0);
-  const magnitudeA = Math.sqrt(vecA.reduce((sum, val) => sum + val * val, 0));
-  const magnitudeB = Math.sqrt(vecB.reduce((sum, val) => sum + val * val, 0));
+export function cosineSimilarity(a: Centroid, b: Centroid): number {
+  const aNorms: number[] = [];
+  const bNorms: number[] = [];
+  const dotProduct = a.values.reduce((sum, val, idx) => {
+    aNorms.push(val / a.totalWeight);
+    bNorms.push(b.values[idx] / b.totalWeight);
+    return sum + aNorms[aNorms.length - 1] * bNorms[bNorms.length - 1];
+  }, 0);
+  const aMag = Math.sqrt(aNorms.reduce((sum, val) => sum + val * val, 0));
+  const bMag = Math.sqrt(bNorms.reduce((sum, val) => sum + val * val, 0));
 
   // Return cosine similarity, ensuring no division by zero
-  return magnitudeA && magnitudeB ? dotProduct / (magnitudeA * magnitudeB) : 0;
+  return aMag && bMag ? dotProduct / (aMag * bMag) : 0;
 }
 
 // Dynamically adjust thresholds based on semantic drift

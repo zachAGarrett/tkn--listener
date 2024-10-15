@@ -2,7 +2,7 @@ import chalk from "chalk";
 import { cosineSimilarity, dynamicThresholdAdjustments } from "./util.js";
 
 export type TokenBank = Map<string, Array<number>>;
-export type Centroid = { values: number[] };
+export type Centroid = { values: number[]; totalWeight: number };
 
 export function ingest(
   input: string,
@@ -14,6 +14,7 @@ export function ingest(
   parsed: string[];
   driftDeltas: number[];
   thresholds: ReturnType<typeof dynamicThresholdAdjustments>;
+  chunks: string[][];
 } {
   const timer =
     chalk.blueBright(`[${runId}]`) + chalk.magentaBright("[PARSED]");
@@ -21,7 +22,8 @@ export function ingest(
   const graphemes = segmenter.segment(input);
   const driftDeltas: number[] = [];
   const parsed: string[] = [];
-  let previousCentroid: Centroid | null = null; // To store the previous centroid
+  const chunks: string[][] = [];
+  let previousCentroid: Centroid | null = null;
   let window: string = "";
   let windowStartIndex: number = 0;
   let newTokenCount: number = 0;
@@ -38,29 +40,24 @@ export function ingest(
 
       if (window !== "") {
         const updatedIndices = [...(bank.get(window) || []), windowStartIndex];
-        bank.set(window, updatedIndices);
-
-        parsed.push(window);
 
         // Calculate and store the centroid for the current window
         totalWeight = totalWeight + updatedIndices.length;
-        const centroidValues = parsed.map(
-          (tkn) => bank.get(tkn)!.length / totalWeight
-        );
         const currentCentroid: Centroid = {
-          values: centroidValues,
+          values: [...(previousCentroid?.values || []), updatedIndices.length],
+          totalWeight,
         };
 
         // If there's a previous centroid, calculate the semantic drift
         if (previousCentroid) {
-          const delta =
-            1 -
-            cosineSimilarity(previousCentroid.values, currentCentroid.values);
+          const delta = 1 - cosineSimilarity(previousCentroid, currentCentroid);
           driftDeltas.push(delta);
         }
 
         // Update the previous centroid
         previousCentroid = currentCentroid;
+        bank.set(window, updatedIndices);
+        parsed.push(window);
       }
 
       window = segment;
@@ -71,6 +68,22 @@ export function ingest(
 
   const thresholds = dynamicThresholdAdjustments(driftDeltas, 5, 0.5, 1.5);
 
+  // Chunk the parsed array based on drift deltas exceeding shift threshold
+  let chunkStartIndex = 0;
+  for (let i = 0; i < driftDeltas.length; i++) {
+    if (driftDeltas[i] > thresholds[i].shiftThreshold) {
+      // If a shift is detected, create a new chunk
+      const chunk = parsed.slice(chunkStartIndex, i + 1);
+      chunks.push(chunk);
+      chunkStartIndex = i + 1; // Move start index to the next token after the split
+    }
+  }
+  // Add the last chunk
+  if (chunkStartIndex < parsed.length) {
+    const chunk = parsed.slice(chunkStartIndex);
+    chunks.push(chunk);
+  }
+
   process.env.VERBOSE && console.timeEnd(timer);
 
   return {
@@ -79,5 +92,6 @@ export function ingest(
     parsed,
     driftDeltas,
     thresholds,
+    chunks,
   };
 }
