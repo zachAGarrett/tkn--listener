@@ -24,7 +24,10 @@ export async function ingestString(
       window = tkn;
     } else {
       bank.set(tkn, "");
-      bank.set(window, bank.get(window) + "|" + String(windowStartindex));
+      bank.set(
+        window,
+        (bank.get(window) || "") + "|" + String(windowStartindex)
+      );
       window = segment;
       newTokenCount += 1;
       windowStartindex = index;

@@ -191,3 +191,53 @@ export class RunningStats {
     return Math.sqrt(this.getVariance());
   }
 }
+
+export function createPositionIndex(tokenBank: TokenBank) {
+  const positionIndex = new Map<number, string>();
+  for (const [token, indicesStr] of tokenBank.entries()) {
+    if (indicesStr.length === 0) {
+      continue;
+    } else {
+      const indices = indicesStr.split("|").filter(Boolean).map(Number);
+      for (const i of indices) {
+        positionIndex.set(i, token);
+      }
+    }
+  }
+  return positionIndex;
+}
+
+export function encodeCorpus(
+  tokenBank: TokenBank,
+  positionIndex: Map<number, string>
+) {
+  const cumulativeProbability = getCumulativeProbability(tokenBank);
+  let high = 1;
+  let low = 0;
+  for (const currentIndex of Array.from(positionIndex.keys()).sort(
+    (a, b) => a - b
+  )) {
+    const range = high - low;
+    const tokenProbability =
+      tokenBank
+        .get(positionIndex.get(currentIndex)!)!
+        .split("|")
+        .filter(Boolean).length / tokenBank.size;
+
+    high = low + range * cumulativeProbability;
+    low = low + range * cumulativeProbability - tokenProbability;
+  }
+
+  // Return the middle of the final range as the encoded value
+  return (low + high) / 2;
+}
+
+const getCumulativeProbability = (tokenBank: TokenBank) => {
+  let cumulativeProbability = 0;
+  tokenBank.forEach(
+    (token) =>
+      (cumulativeProbability +=
+        token.split("|").slice(1).length / tokenBank.size)
+  );
+  return cumulativeProbability;
+};
