@@ -60,13 +60,17 @@ async function processSources(driver: Driver, sources: Source[]) {
         const { bank, newTokenCount, chunks, driftDeltas } = ingest(
           corpus,
           memory,
-          runId
+          runId,
+          {
+            minChunk: 10,
+            k: 1,
+          }
         );
 
-        await createDriftDeltasChart(
-          driftDeltas,
-          "/Users/zach/Downloads/" + i + "_" + runId + "_drift_deltas.png"
-        );
+        // await createDriftDeltasChart(
+        //   driftDeltas,
+        //   "/Users/zach/Downloads/" + i + "_" + runId + "_drift_deltas.png"
+        // );
 
         chunks.map((chunk, i) =>
           console.log(chalk.magentaBright("CHUNK" + i + ":"), chunk)
@@ -107,6 +111,9 @@ async function main() {
   const sources: Source[] = [
     // { type: SourceType.wiki, identifier: "Operator_algebra" },
     // { type: SourceType.doc, identifier: "./package-lock.json" },
+    { type: SourceType.doc, identifier: "./package.json" },
+    { type: SourceType.doc, identifier: "./package.json" },
+    { type: SourceType.doc, identifier: "./package.json" },
     { type: SourceType.doc, identifier: "./package.json" },
     // { type: SourceType.doc, identifier: "./tsconfig.json" },
   ];
