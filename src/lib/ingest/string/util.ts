@@ -19,6 +19,14 @@ export class RunningStats {
     this.max = 0;
   }
 
+  reset() {
+    this.n = 0;
+    this.mean = 0;
+    this.M2 = 0;
+    this.nullCount = 0;
+    this.max = 0;
+  }
+
   /**
    * Adds a value to the running statistics, updating mean and M2.
    * @param x - The value to add.

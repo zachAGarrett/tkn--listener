@@ -1,5 +1,10 @@
 import chalk from "chalk";
-import { cosineSimilarity, dynamicThresholdAdjustments } from "./util.js";
+import {
+  cosineSimilarity,
+  dynamicThresholdAdjustments,
+  RunningStats,
+} from "./util.js";
+import { createDriftDeltasChart } from "../../../dev_util/outputChart.js";
 
 export type TokenBank = Map<string, Array<number>>;
 export type Centroid = { values: number[]; totalWeight: number };
@@ -11,9 +16,9 @@ export function ingest(
 ): {
   bank: TokenBank;
   newTokenCount: number;
-  parsed: string[];
+  // parsed: string[];
   driftDeltas: number[];
-  thresholds: ReturnType<typeof dynamicThresholdAdjustments>;
+  // thresholds: ReturnType<typeof dynamicThresholdAdjustments>;
   chunks: string[][];
 } {
   const timer =
@@ -21,8 +26,8 @@ export function ingest(
   const segmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
   const graphemes = segmenter.segment(input);
   const driftDeltas: number[] = [];
-  const parsed: string[] = [];
-  const chunks: string[][] = [];
+  const chunks: string[][] = [[]];
+  const chunkStats = new RunningStats();
   let previousCentroid: Centroid | null = null;
   let window: string = "";
   let windowStartIndex: number = 0;
@@ -51,13 +56,26 @@ export function ingest(
         // If there's a previous centroid, calculate the semantic drift
         if (previousCentroid) {
           const delta = 1 - cosineSimilarity(previousCentroid, currentCentroid);
+          if (
+            Math.abs(delta) >=
+              Math.abs(
+                chunkStats.getMean() + chunkStats.getStandardDeviation()
+              ) &&
+            chunks[chunks.length - 1].length > 10
+          ) {
+            chunkStats.reset();
+            chunks.push([]);
+          } else {
+            chunkStats.addValue(delta);
+            chunks[chunks.length - 1].push(window);
+          }
           driftDeltas.push(delta);
         }
 
         // Update the previous centroid
         previousCentroid = currentCentroid;
         bank.set(window, updatedIndices);
-        parsed.push(window);
+        // parsed.push(window);
       }
 
       window = segment;
@@ -66,32 +84,32 @@ export function ingest(
     }
   }
 
-  const thresholds = dynamicThresholdAdjustments(driftDeltas, 5, 0.5, 1.5);
+  // const thresholds = dynamicThresholdAdjustments(driftDeltas, 5, 0.5, 1.5);
 
   // Chunk the parsed array based on drift deltas exceeding shift threshold
-  let chunkStartIndex = 0;
-  for (let i = 0; i < driftDeltas.length; i++) {
-    if (driftDeltas[i] > thresholds[i].shiftThreshold) {
-      // If a shift is detected, create a new chunk
-      const chunk = parsed.slice(chunkStartIndex, i + 1);
-      chunks.push(chunk);
-      chunkStartIndex = i + 1; // Move start index to the next token after the split
-    }
-  }
-  // Add the last chunk
-  if (chunkStartIndex < parsed.length) {
-    const chunk = parsed.slice(chunkStartIndex);
-    chunks.push(chunk);
-  }
+  // let chunkStartIndex = 0;
+  // for (let i = 0; i < driftDeltas.length; i++) {
+  //   if (driftDeltas[i] > thresholds[i].shiftThreshold) {
+  //     // If a shift is detected, create a new chunk
+  //     const chunk = parsed.slice(chunkStartIndex, i + 1);
+  //     chunks.push(chunk);
+  //     chunkStartIndex = i + 1; // Move start index to the next token after the split
+  //   }
+  // }
+  // // Add the last chunk
+  // if (chunkStartIndex < parsed.length) {
+  //   const chunk = parsed.slice(chunkStartIndex);
+  //   chunks.push(chunk);
+  // }
 
   process.env.VERBOSE && console.timeEnd(timer);
 
   return {
     bank,
     newTokenCount,
-    parsed,
+    // parsed,
     driftDeltas,
-    thresholds,
+    // thresholds,
     chunks,
   };
 }

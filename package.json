@@ -28,6 +28,8 @@
     "@types/glob-watcher": "^5.0.5",
     "@types/html-to-text": "^9.0.4",
     "@types/node": "^22.7.4",
+    "canvas": "^2.11.2",
+    "chartjs-node-canvas": "^4.1.6",
     "form-data": "^4.0.0",
     "glob": "^11.0.0",
     "p-limit": "^6.1.0"
