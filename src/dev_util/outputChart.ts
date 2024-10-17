@@ -2,9 +2,9 @@ import { ChartJSNodeCanvas } from "chartjs-node-canvas";
 import { writeFileSync } from "fs";
 
 // Function to create a line chart from an array of deltas and save it to a PNG file
-export async function createDriftDeltasChart(
-  driftDeltas: number[],
-  outputPath: string = "drift_deltas_chart.png"
+export async function outputChart(
+  data: number[],
+  outputPath: string = "chart.png"
 ) {
   // Create an instance of ChartJSNodeCanvas with the desired dimensions
   const width = 800; // Width of the chart
@@ -15,11 +15,11 @@ export async function createDriftDeltasChart(
   const imageBuffer = await chartJSNodeCanvas.renderToBuffer({
     type: "line",
     data: {
-      labels: driftDeltas.map((_, index) => index.toString()), // Use index as x-axis
+      labels: data.map((_, index) => index.toString()), // Use index as x-axis
       datasets: [
         {
           label: "Semantic Drift Deltas",
-          data: driftDeltas,
+          data,
           borderColor: "rgba(75, 192, 192, 1)",
           borderWidth: 2,
           fill: false,

@@ -10,14 +10,14 @@ export async function getWikipediaArticle(
   const sectionsUrl = `${baseUrl}?action=parse&page=${encodeURIComponent(
     title
   )}&format=json&prop=sections`;
-  const logBase =
-    chalk.blueBright(`[${runId}]`) + chalk.yellowBright(`[${sectionsUrl}]`);
-  const timer = logBase + chalk.magentaBright("[RETRIEVED]");
-  process.env.VERBOSE && console.time(timer);
+  const logBase = chalk.blueBright(`[${runId}]`);
+  const retrievalLog = logBase + chalk.magentaBright("[RETRIEVED SOURCE]");
+  const fetchStartLog = logBase + chalk.magentaBright("[FETCHING SOURCE]");
+
+  process.env.VERBOSE && console.log(fetchStartLog);
+  process.env.VERBOSE && console.time(retrievalLog);
 
   try {
-    process.env.VERBOSE &&
-      console.log(logBase + chalk.magentaBright("[FETCHING]"));
     const sectionsResponse = await fetch(sectionsUrl);
 
     if (!sectionsResponse.ok) {
@@ -68,11 +68,11 @@ export async function getWikipediaArticle(
       allSectionsContent.push(`${sectionTitle}:\n${plainText}\n`);
     }
 
-    process.env.VERBOSE && console.timeEnd(timer);
+    process.env.VERBOSE && console.timeEnd(retrievalLog);
     // Join all sections content with double line breaks
     return { runId, content: allSectionsContent.join("\n\n") };
   } catch (error) {
-    process.env.VERBOSE && console.timeEnd(timer);
+    process.env.VERBOSE && console.timeEnd(retrievalLog);
     console.error(
       chalk.blueBright(`[${runId}]`) +
         chalk.redBright(
