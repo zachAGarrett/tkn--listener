@@ -1,7 +1,7 @@
 export async function limitedBatchProcessor<T>(
   promises: Promise<T>[],
   concurrencyLimit: number,
-  boundaryCallback?: () => Promise<void>
+  boundaryCallback?: (arg0?: Awaited<T>[]) => Promise<void>
 ): Promise<T[]> {
   const results: T[] = [];
 
@@ -18,7 +18,7 @@ export async function limitedBatchProcessor<T>(
     // Await the boundary callback if provided, before starting the next batch
     // Only call the boundary callback if there are more promises left to process
     if (boundaryCallback) {
-      await boundaryCallback();
+      await boundaryCallback(batchResults);
     }
   }
 

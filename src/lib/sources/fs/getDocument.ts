@@ -3,7 +3,8 @@ import { randomUUID } from "crypto";
 import { readFile } from "fs/promises";
 
 export async function getDocument(path: string, runId: string = randomUUID()) {
-  const logBase = chalk.blueBright(`[${runId}]`);
+  const logBase =
+    chalk.yellowBright("[PARSING]") + chalk.blueBright(`[${runId}]`);
   const retrievalLog = logBase + chalk.magentaBright("[RETRIEVED SOURCE]");
   const fetchStartLog = logBase + chalk.magentaBright("[FETCHING SOURCE]");
 

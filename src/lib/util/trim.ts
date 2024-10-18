@@ -1,41 +1,58 @@
 import chalk from "chalk";
 import { RollingStats } from "./rollingStats.js";
-import { TokenBank } from "./tokenBank.js";
+import { AdjacencyList } from "./buildAdjacencyList.js";
 
-export async function trim(memory: TokenBank) {
+export function trim(
+  adjacencyList: AdjacencyList,
+  k: number = 1,
+  runId: string
+) {
+  const logBase =
+    chalk.yellowBright("[PARSING]") + chalk.blueBright(`[${runId}]`);
   const stats = new RollingStats();
   let std: number;
   let mean: number;
-  let nullCounter: number;
 
-  const timer = chalk.magentaBright("[TRIMMED MEMORY]");
+  const timer = logBase + chalk.magentaBright("[TRIMMED MEMORY]");
   process.env.VERBOSE && console.time(timer);
 
   process.env.VERBOSE &&
     console.log(
-      chalk.magentaBright("[MEMORY SIZE]", chalk.white(memory.size + "tkns"))
+      logBase +
+        chalk.magentaBright(
+          "[MEMORY SIZE]",
+          chalk.white(adjacencyList.size + "tkns")
+        )
     );
 
-  // Profile the memory
-  memory.forEach((v, k) => {
-    const appearances = v.split("|").filter(Boolean).length;
-    if (appearances === 0) {
-      memory.delete(k);
-      nullCounter += 1;
-    } else {
-      stats.addValue(appearances);
-    }
+  adjacencyList.forEach((pTkns) => {
+    stats.addValue(pTkns.length);
   });
 
   std = stats.getStandardDeviation();
   mean = stats.getMean();
 
   // Trim the tokens with low confidence
-  memory.forEach((v, k) => {
-    const appearances = v.split("|").filter(Boolean).length;
-    if (appearances <= mean - std) {
-      memory.delete(k);
+  adjacencyList.forEach((pTkns, tkn) => {
+    if (pTkns.length <= mean + std * k) {
+      adjacencyList.delete(tkn);
     }
   });
+
+  adjacencyList.forEach((pTkns, tkn) => {
+    const qualifiedPrecedingTkns = pTkns.filter(({ tkn }) =>
+      adjacencyList.has(tkn)
+    );
+    adjacencyList.set(tkn, qualifiedPrecedingTkns);
+  });
+
   console.timeEnd(timer);
+  process.env.VERBOSE &&
+    console.log(
+      logBase +
+        chalk.magentaBright(
+          "[MEMORY SIZE]",
+          chalk.white(adjacencyList.size + "tkns")
+        )
+    );
 }

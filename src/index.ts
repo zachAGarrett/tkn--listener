@@ -1,17 +1,45 @@
-import { read } from "./lib/ingest/string/index.js";
+import { read, ReadResponse } from "./lib/ingest/string/index.js";
 import neo4j, { Driver } from "neo4j-driver";
 import dotenv from "dotenv";
-import chalk from "chalk";
 import { getSource, Source, SourceType } from "./lib/sources/index.js";
 import { randomUUID } from "crypto";
 import { limitedBatchProcessor } from "./lib/util/limitedBatchProcessor.js";
-import { TokenBank } from "./lib/util/tokenBank.js";
+import { sync } from "./lib/util/sync.js";
+import {
+  AdjacencyList,
+  buildAdjacencyList,
+} from "./lib/util/buildAdjacencyList.js";
 import { trim } from "./lib/util/trim.js";
 
 dotenv.config();
 
-async function processSources(driver: Driver, sources: Source[]) {
-  let memory: TokenBank = new Map();
+async function push(batchResults: ReadResponse[], driver: Driver) {
+  let mergedAdjacencyList: AdjacencyList = new Map();
+  batchResults.forEach(({ parsed, runId }) => {
+    if (!parsed) return;
+
+    const adjacencyList = buildAdjacencyList(parsed, runId);
+    trim(adjacencyList, undefined, runId);
+    if (mergedAdjacencyList.size === 0) {
+      mergedAdjacencyList = adjacencyList;
+    } else {
+      adjacencyList.forEach((pTkns, tkn) => {
+        let pTknsToSet = mergedAdjacencyList.get(tkn);
+        if (pTknsToSet) {
+          pTknsToSet = [...pTknsToSet, ...pTkns];
+        } else {
+          pTknsToSet = pTkns;
+        }
+
+        mergedAdjacencyList.set(tkn, pTknsToSet);
+      });
+    }
+  });
+  await sync(mergedAdjacencyList, driver, randomUUID(), 200);
+}
+
+async function readSources(driver: Driver, sources: Source[]) {
+  let memory: Set<string> = new Set();
 
   const results = await limitedBatchProcessor(
     sources.map((source) =>
@@ -20,13 +48,11 @@ async function processSources(driver: Driver, sources: Source[]) {
       )
     ),
     5,
-    () => trim(memory)
+    async (batchResults) => {
+      if (!batchResults) return;
+      await push(batchResults, driver);
+    }
   );
-
-  process.env.VERBOSE &&
-    console.log(
-      chalk.magentaBright("[MEMORY SIZE]", chalk.white(memory.size + "tkns"))
-    );
 
   return { results, memory };
 }
@@ -39,14 +65,14 @@ async function main() {
 
   const sources: Source[] = [
     { type: SourceType.wiki, identifier: "Operator_algebra" },
-    // { type: SourceType.wiki, identifier: "API" },
+    { type: SourceType.wiki, identifier: "API" },
     // { type: SourceType.doc, identifier: "./package-lock.json" },
     // { type: SourceType.doc, identifier: "./package.json" },
     // { type: SourceType.doc, identifier: "./tsconfig.json" },
   ];
 
   try {
-    const { results, memory } = await processSources(driver, sources);
+    const { results, memory } = await readSources(driver, sources);
   } finally {
     await driver.close();
   }

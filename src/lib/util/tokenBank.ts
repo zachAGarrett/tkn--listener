@@ -1,1 +1,1 @@
-export type TokenBank = Map<string, string>;
+export type TokenBank = Map<string, number>;

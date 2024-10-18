@@ -10,7 +10,8 @@ export async function getWikipediaArticle(
   const sectionsUrl = `${baseUrl}?action=parse&page=${encodeURIComponent(
     title
   )}&format=json&prop=sections`;
-  const logBase = chalk.blueBright(`[${runId}]`);
+  const logBase =
+    chalk.yellowBright("[PARSING]") + chalk.blueBright(`[${runId}]`);
   const retrievalLog = logBase + chalk.magentaBright("[RETRIEVED SOURCE]");
   const fetchStartLog = logBase + chalk.magentaBright("[FETCHING SOURCE]");
 

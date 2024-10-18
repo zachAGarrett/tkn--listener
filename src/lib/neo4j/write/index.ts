@@ -1,6 +1,6 @@
 import { Driver, Session, ManagedTransaction } from "neo4j-driver";
 
-export async function insertTkn(
+export async function insert(
   driver: Driver,
   value: number,
   connectToValues: number[]
