@@ -3,13 +3,14 @@ import neo4j, { Driver } from "neo4j-driver";
 import dotenv from "dotenv";
 import { getSource, Source, SourceType } from "./lib/sources/index.js";
 import { randomUUID } from "crypto";
-import { limitedBatchProcessor } from "./lib/util/limitedBatchProcessor.js";
-import { sync } from "./lib/util/sync.js";
+import { limitedBatchProcessor } from "./util/limitedBatchProcessor.js";
+import { sync } from "./util/sync.js";
 import {
   AdjacencyList,
   buildAdjacencyList,
-} from "./lib/util/buildAdjacencyList.js";
-import { trim } from "./lib/util/trim.js";
+} from "./util/buildAdjacencyList.js";
+import { trim } from "./util/trim.js";
+import { getTopTkns } from "./lib/neo4j/gds/getTopTokens.js";
 
 dotenv.config();
 
@@ -39,7 +40,9 @@ async function push(batchResults: ReadResponse[], driver: Driver) {
 }
 
 async function readSources(driver: Driver, sources: Source[]) {
-  let memory: Set<string> = new Set();
+  const topTkns = await getTopTkns(driver, 0.2);
+  console.log(topTkns);
+  let memory: Set<string> = new Set(topTkns.map(({ tkn }) => tkn));
 
   const results = await limitedBatchProcessor(
     sources.map((source) =>

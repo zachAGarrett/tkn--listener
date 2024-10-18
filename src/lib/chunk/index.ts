@@ -1,4 +1,4 @@
-import { RollingStats } from "../util/rollingStats.js";
+import { RollingStats } from "../../util/rollingStats.js";
 import { RollingCentroid } from "./util/rollingCentroid.js";
 
 export interface ChunkOptions {
