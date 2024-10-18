@@ -18,15 +18,15 @@ export async function getTopTkns(driver: Driver, topPct: number) {
     `);
 
     // Step 2: Estimate memory requirements for PageRank
-    await tx.run(`
-      CALL gds.pageRank.write.estimate('tkns', {
-        writeProperty: 'pageRank',
-        maxIterations: 20,
-        dampingFactor: 0.85
-      })
-      YIELD nodeCount, relationshipCount, bytesMin, bytesMax, requiredMemory
-      RETURN *
-    `);
+    // await tx.run(`
+    //   CALL gds.pageRank.write.estimate('tkns', {
+    //     writeProperty: 'pageRank',
+    //     maxIterations: 20,
+    //     dampingFactor: 0.85
+    //   })
+    //   YIELD nodeCount, relationshipCount, bytesMin, bytesMax, requiredMemory
+    //   RETURN *
+    // `);
 
     // Step 3: Execute the PageRank algorithm and return top percentage tokens
     const topTokensResult = await tx.run(
