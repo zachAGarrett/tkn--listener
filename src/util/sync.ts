@@ -12,7 +12,7 @@ export async function sync(
     chalk.yellowBright("[SYNCING]") + chalk.blueBright(`[${runId}]`);
   const session = driver.session();
   let tx = session.beginTransaction();
-  process.env.VERBOSE &&
+  process.env.VERBOSE?.toLowerCase() === "true" &&
     console.log(
       logBase +
         chalk.magentaBright("[PUSHING]") +
@@ -46,7 +46,7 @@ export async function sync(
       // Commit after every `batchSize` operations
       if (opsCt % batchSize === 0) {
         await tx.commit();
-        process.env.VERBOSE &&
+        process.env.VERBOSE?.toLowerCase() === "true" &&
           console.log(
             logBase +
               chalk.magentaBright("[COMMITTED]") +
@@ -59,14 +59,14 @@ export async function sync(
 
     // Commit any remaining operations
     await tx.commit();
-    process.env.VERBOSE &&
+    process.env.VERBOSE?.toLowerCase() === "true" &&
       console.log(
         logBase +
           chalk.magentaBright("[COMMITTED]") +
           chalk.white((opsCt % batchSize) + "tkns")
       );
   } catch (error) {
-    process.env.VERBOSE &&
+    process.env.VERBOSE?.toLowerCase() === "true" &&
       console.error(
         logBase + "Transaction failed and will be rolled back:",
         error

@@ -7,23 +7,9 @@ export function trim(
   k: number = 1,
   runId: string
 ) {
-  const logBase =
-    chalk.yellowBright("[PARSING]") + chalk.blueBright(`[${runId}]`);
   const stats = new RollingStats();
   let std: number;
   let mean: number;
-
-  const timer = logBase + chalk.magentaBright("[TRIMMED MEMORY]");
-  process.env.VERBOSE && console.time(timer);
-
-  process.env.VERBOSE &&
-    console.log(
-      logBase +
-        chalk.magentaBright(
-          "[MEMORY SIZE]",
-          chalk.white(adjacencyList.size + "tkns")
-        )
-    );
 
   adjacencyList.forEach((pTkns) => {
     stats.addValue(pTkns.length);
@@ -46,12 +32,12 @@ export function trim(
     adjacencyList.set(tkn, qualifiedPrecedingTkns);
   });
 
-  console.timeEnd(timer);
-  process.env.VERBOSE &&
+  process.env.VERBOSE?.toLowerCase() === "true" &&
     console.log(
-      logBase +
+      chalk.yellowBright("[PARSING]") +
+        chalk.blueBright(`[${runId}]`) +
         chalk.magentaBright(
-          "[MEMORY SIZE]",
+          "[TRIMMED MEMORY SIZE]",
           chalk.white(adjacencyList.size + "tkns")
         )
     );

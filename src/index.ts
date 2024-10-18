@@ -1,4 +1,4 @@
-import { read, ReadResponse } from "./lib/ingest/string/index.js";
+import { read, ReadResponse, decode } from "./lib/ingest/string/index.js";
 import neo4j, { Driver, Neo4jError } from "neo4j-driver";
 import dotenv from "dotenv";
 import { getSource, Source, SourceType } from "./lib/sources/index.js";
@@ -12,6 +12,8 @@ import {
 import { trim } from "./util/trim.js";
 import { getTopTkns } from "./lib/neo4j/gds/getTopTokens.js";
 import chalk from "chalk";
+import { withTimer } from "./util/withTimer.js";
+import { writeFileSync } from "fs";
 // import { writeFileSync } from "fs";
 
 dotenv.config();
@@ -50,16 +52,33 @@ async function readSources(driver: Driver, sources: Source[]) {
     );
     return undefined;
   });
-  let memory: Set<string> = new Set(topTkns?.map(({ tkn }) => tkn));
-  console.log(memory)
-
-  // writeFileSync("./topTokens.json", JSON.stringify(topTkns, undefined, 2));
+  let memory: Set<string> = new Set(topTkns || []);
 
   const results = await limitedBatchProcessor(
     sources.map((source) =>
-      getSource(source, randomUUID()).then(({ content, runId }) =>
-        content ? read(content!, memory, runId) : { parsed: undefined, runId }
-      )
+      getSource(source, randomUUID()).then(({ content, runId }) => {
+        if (content) {
+          const timedRead = withTimer(() => read(content!, memory, runId));
+          const { result, duration } = timedRead();
+          console.log(
+            chalk.yellowBright("[PARSING]") +
+              chalk.blueBright(`[${runId}]`) +
+              chalk.magentaBright("[PARSED]") +
+              chalk.white(
+                result.opct +
+                  " ops | " +
+                  String(
+                    Math.round((result.opct / duration / duration) * 10000) /
+                      10000
+                  ) +
+                  " ops/ms"
+              )
+          );
+          return result;
+        } else {
+          return { parsed: undefined, runId, opct: 0 };
+        }
+      })
     ),
     5,
     async (batchResults) => {

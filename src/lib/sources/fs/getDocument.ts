@@ -8,16 +8,18 @@ export async function getDocument(path: string, runId: string = randomUUID()) {
   const retrievalLog = logBase + chalk.magentaBright("[RETRIEVED SOURCE]");
   const fetchStartLog = logBase + chalk.magentaBright("[FETCHING SOURCE]");
 
-  process.env.VERBOSE && console.log(fetchStartLog);
-  process.env.VERBOSE && console.time(retrievalLog);
+  process.env.VERBOSE?.toLowerCase() === "true" && console.log(fetchStartLog);
+  process.env.VERBOSE?.toLowerCase() === "true" && console.time(retrievalLog);
 
   try {
     const res = await readFile(path, "utf-8");
 
-    process.env.VERBOSE && console.timeEnd(retrievalLog);
+    process.env.VERBOSE?.toLowerCase() === "true" &&
+      console.timeEnd(retrievalLog);
     return { content: res, runId };
   } catch (error) {
-    process.env.VERBOSE && console.timeEnd(retrievalLog);
+    process.env.VERBOSE?.toLowerCase() === "true" &&
+      console.timeEnd(retrievalLog);
     throw chalk.red("Could not read file" + "\n" + error);
   }
 }

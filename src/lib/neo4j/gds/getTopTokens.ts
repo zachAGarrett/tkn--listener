@@ -1,4 +1,6 @@
+import { writeFileSync } from "fs";
 import { Driver } from "neo4j-driver";
+import { decode } from "../../ingest/string/index.js";
 
 export async function getTopTkns(driver: Driver, topPct: number) {
   const session = driver.session();
@@ -44,14 +46,29 @@ export async function getTopTkns(driver: Driver, topPct: number) {
     );
 
     // Get the top tokens from the result
-    const topTkns: { tkn: string; score: number }[] =
-      topTokensResult.records[0].get("topTkns") || [];
+    const topTkns: string[] = topTokensResult.records[0].get("topTkns") || [];
 
     // Step 4: Drop the graph
     await tx.run(`CALL gds.graph.drop('tkns')`);
 
     // Commit the transaction
     await tx.commit();
+
+    // Optionally output the list
+    if (topTkns && process.env.OUTPUTTKNS?.toLowerCase() === "true") {
+      writeFileSync(
+        "./output/topTokens.json",
+        JSON.stringify(
+          topTkns.flatMap((tkn) =>
+            decode(tkn)
+              .map((cp) => String.fromCodePoint(cp))
+              .join("")
+          ),
+          undefined,
+          2
+        )
+      );
+    }
 
     // Return the top tokens
     return topTkns;
