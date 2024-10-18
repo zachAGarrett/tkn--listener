@@ -15,8 +15,8 @@ export async function getWikipediaArticle(
   const retrievalLog = logBase + chalk.magentaBright("[RETRIEVED SOURCE]");
   const fetchStartLog = logBase + chalk.magentaBright("[FETCHING SOURCE]");
 
-  process.env.VERBOSE && console.log(fetchStartLog);
-  process.env.VERBOSE && console.time(retrievalLog);
+  process.env.VERBOSE?.toLowerCase() === "true" && console.log(fetchStartLog);
+  process.env.VERBOSE?.toLowerCase() === "true" && console.time(retrievalLog);
 
   try {
     const sectionsResponse = await fetch(sectionsUrl);
@@ -69,11 +69,13 @@ export async function getWikipediaArticle(
       allSectionsContent.push(`${sectionTitle}:\n${plainText}\n`);
     }
 
-    process.env.VERBOSE && console.timeEnd(retrievalLog);
+    process.env.VERBOSE?.toLowerCase() === "true" &&
+      console.timeEnd(retrievalLog);
     // Join all sections content with double line breaks
     return { runId, content: allSectionsContent.join("\n\n") };
   } catch (error) {
-    process.env.VERBOSE && console.timeEnd(retrievalLog);
+    process.env.VERBOSE?.toLowerCase() === "true" &&
+      console.timeEnd(retrievalLog);
     console.error(
       logBase +
         chalk.redBright(
