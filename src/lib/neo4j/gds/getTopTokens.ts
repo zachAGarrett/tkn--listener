@@ -8,7 +8,7 @@ export async function getTopTkns(driver: Driver, topPct: number) {
   try {
     // Step 1: Project the graph
     await tx.run(`
-      MATCH (source:Tkn)-[r:PRECEDES]->(target:Tkn)
+      MATCH (source:Tkn)-[r:D1]->(target:Tkn)
       RETURN gds.graph.project(
         'tkns',
         source,
@@ -56,7 +56,6 @@ export async function getTopTkns(driver: Driver, topPct: number) {
     // Return the top tokens
     return topTkns;
   } catch (error) {
-    console.error("Transaction failed and will be rolled back:", error);
     await tx.rollback();
     throw error; // Rethrow the error after rollback for further handling if needed
   } finally {

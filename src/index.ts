@@ -1,5 +1,5 @@
 import { read, ReadResponse } from "./lib/ingest/string/index.js";
-import neo4j, { Driver } from "neo4j-driver";
+import neo4j, { Driver, Neo4jError } from "neo4j-driver";
 import dotenv from "dotenv";
 import { getSource, Source, SourceType } from "./lib/sources/index.js";
 import { randomUUID } from "crypto";
@@ -11,6 +11,8 @@ import {
 } from "./util/buildAdjacencyList.js";
 import { trim } from "./util/trim.js";
 import { getTopTkns } from "./lib/neo4j/gds/getTopTokens.js";
+import chalk from "chalk";
+// import { writeFileSync } from "fs";
 
 dotenv.config();
 
@@ -40,9 +42,18 @@ async function push(batchResults: ReadResponse[], driver: Driver) {
 }
 
 async function readSources(driver: Driver, sources: Source[]) {
-  const topTkns = await getTopTkns(driver, 0.2);
-  console.log(topTkns);
-  let memory: Set<string> = new Set(topTkns.map(({ tkn }) => tkn));
+  const topTkns = await getTopTkns(driver, 0.2).catch((err: Neo4jError) => {
+    console.error(
+      chalk.yellowBright("[GETTING TOP TKNS]") +
+        chalk.red("[FAIL]") +
+        chalk.white(err.code)
+    );
+    return undefined;
+  });
+  let memory: Set<string> = new Set(topTkns?.map(({ tkn }) => tkn));
+  console.log(memory)
+
+  // writeFileSync("./topTokens.json", JSON.stringify(topTkns, undefined, 2));
 
   const results = await limitedBatchProcessor(
     sources.map((source) =>
@@ -69,13 +80,16 @@ async function main() {
   const sources: Source[] = [
     { type: SourceType.wiki, identifier: "Operator_algebra" },
     { type: SourceType.wiki, identifier: "API" },
+    { type: SourceType.wiki, identifier: "Zach_Garrett" },
+    { type: SourceType.wiki, identifier: "Archery" },
+    { type: SourceType.wiki, identifier: "Art" },
     // { type: SourceType.doc, identifier: "./package-lock.json" },
     // { type: SourceType.doc, identifier: "./package.json" },
     // { type: SourceType.doc, identifier: "./tsconfig.json" },
   ];
 
   try {
-    const { results, memory } = await readSources(driver, sources);
+    const res = await readSources(driver, sources);
   } finally {
     await driver.close();
   }

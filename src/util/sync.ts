@@ -29,7 +29,7 @@ export async function sync(
         UNWIND $precedingTkns AS preceding
         MERGE (p:Tkn { value: preceding.tkn })
         MERGE (t:Tkn { value: $currentTkn })
-        CREATE (p)-[r:PRECEDES { idx: preceding.idx, runId: preceding.rId }]->(t)
+        CREATE (p)-[r:D1 { idx: preceding.idx, runId: preceding.rId }]->(t)
         `,
         {
           precedingTkns: precedingTkns.map((t) => ({

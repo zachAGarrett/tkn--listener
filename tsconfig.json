@@ -14,8 +14,11 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "outDir": "build",
-    "preserveConstEnums": true
+    "declaration": true,
+    "declarationDir": "build/types",
+    "preserveConstEnums": true,
+    "noUnusedParameters": true
   },
   "include": ["./src/**/*.ts"],
-  "exclude": ["node_modules", "src/dev_util"]
+  "exclude": ["node_modules"]
 }

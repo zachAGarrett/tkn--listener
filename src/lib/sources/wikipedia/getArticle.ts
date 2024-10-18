@@ -75,7 +75,7 @@ export async function getWikipediaArticle(
   } catch (error) {
     process.env.VERBOSE && console.timeEnd(retrievalLog);
     console.error(
-      chalk.blueBright(`[${runId}]`) +
+      logBase +
         chalk.redBright(
           `[Failed to fetch Wikipedia article]\n${(error as any).message}`
         )
