@@ -1,9 +1,11 @@
+import { Token } from "./parse.js";
+
 export interface PreceedingTkn {
-  tkn: string;
+  tkn: Token;
   idx: number;
   rId: string;
 }
-export type AdjacencyList = Map<string, PreceedingTkn[]>;
+export type AdjacencyList = Map<Token, PreceedingTkn[]>;
 export function buildAdjacencyList(parsedCorpus: string[], runId: string) {
   const adjacencyList: AdjacencyList = new Map();
 

@@ -1,23 +1,23 @@
-export interface ReadResponse {
+
+export type Token = string;
+export interface ParseResponse {
   parsed: string[] | undefined;
   runId: string;
   opct: number;
 }
-export function read(
-  corpus: string,
-  bank: Set<string> = new Set(),
+export function parse(
+  corpus: string | number[],
+  bank: Set<Token> = new Set(),
   runId: string
-): ReadResponse {
-  // const segmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
-  // const graphemes = segmenter.segment(corpus);
-
+): ParseResponse {
+  const isString = typeof corpus === "string";
   const l = corpus.length;
-  const parsed: string[] = [];
+  const parsed: Token[] = [];
   let w: number[] = [];
   let bs_l: number = 0;
 
   for (let i = 0; i < l; i++) {
-    const s = corpus.codePointAt(i);
+    const s = isString ? corpus.codePointAt(i) : corpus[i];
     if (s === undefined) continue;
     w.push(s);
 
@@ -40,7 +40,7 @@ export function read(
   return { parsed, runId, opct: l };
 }
 
-export function encode(arr: number[]): string {
+export function encode(arr: number[]): Token {
   const buffer = Buffer.alloc(arr.length * 4); // 4 bytes for each integer
   for (let i = 0; i < arr.length; i++) {
     buffer.writeInt32LE(arr[i], i * 4); // Store each number as a 32-bit integer
@@ -48,7 +48,7 @@ export function encode(arr: number[]): string {
   return buffer.toString("base64"); // Convert the buffer to a base64 string
 }
 
-export function decode(encodedString: string): number[] {
+export function decode(encodedString: Token): number[] {
   const buffer = Buffer.from(encodedString, "base64");
   const numbers: number[] = [];
   for (let i = 0; i < buffer.length; i += 4) {

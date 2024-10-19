@@ -1,5 +1,5 @@
-import { RollingStats } from "../../util/rollingStats.js";
-import { RollingCentroid } from "./util/rollingCentroid.js";
+import { RollingStats } from "../util/rollingStats.js";
+import { RollingCentroid } from "./rollingCentroid.js";
 
 export interface ChunkOptions {
   minChunk?: number;

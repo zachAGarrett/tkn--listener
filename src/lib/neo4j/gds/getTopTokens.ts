@@ -1,6 +1,6 @@
 import { writeFileSync } from "fs";
 import { Driver } from "neo4j-driver";
-import { decode } from "../../ingest/string/index.js";
+import { decode } from "../../parse.js";
 
 export async function getTopTkns(driver: Driver, topPct: number) {
   const session = driver.session();
