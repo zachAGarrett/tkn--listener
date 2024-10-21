@@ -1,94 +1,9 @@
-import neo4j, { Driver, Neo4jError } from "neo4j-driver";
+import net from "net";
+import neo4j from "neo4j-driver";
+import { handleStream } from "./lib/server/tcp.js";
 import dotenv from "dotenv";
-import { getSource, Source, SourceType } from "./lib/sources/index.js";
-import { randomUUID } from "crypto";
-import { limitedBatchProcessor } from "./util/limitedBatchProcessor.js";
-import { sync } from "./lib/sync.js";
-import { AdjacencyList, buildAdjacencyList } from "./lib/buildAdjacencyList.js";
-import { trim } from "./lib/trim.js";
-import { getTopTkns } from "./lib/neo4j/gds/getTopTokens.js";
-import chalk from "chalk";
-import { withTimer } from "./util/withTimer.js";
-import { parse, ParseResponse } from "./lib/parse.js";
 
 dotenv.config();
-
-async function syncBatch(batchResults: ParseResponse[], driver: Driver) {
-  let mergedAdjacencyList: AdjacencyList = new Map();
-  batchResults.forEach(({ parsed, runId }) => {
-    if (!parsed) return;
-
-    const adjacencyList = buildAdjacencyList(parsed, runId);
-    trim(adjacencyList, undefined, runId);
-    if (mergedAdjacencyList.size === 0) {
-      mergedAdjacencyList = adjacencyList;
-    } else {
-      adjacencyList.forEach((pTkns, tkn) => {
-        let pTknsToSet = mergedAdjacencyList.get(tkn);
-        if (pTknsToSet) {
-          pTknsToSet = [...pTknsToSet, ...pTkns];
-        } else {
-          pTknsToSet = pTkns;
-        }
-
-        mergedAdjacencyList.set(tkn, pTknsToSet);
-      });
-    }
-  });
-
-  await sync(mergedAdjacencyList, driver, randomUUID(), 200);
-}
-
-async function readSources(driver: Driver, sources: Source[]) {
-  const topTkns = await getTopTkns(driver, 0.2).catch((err: Neo4jError) => {
-    process.env.VERBOSE?.toLowerCase() === "true" &&
-      console.error(
-        chalk.yellowBright("[GETTING TOP TKNS]") +
-          chalk.red("[FAIL]") +
-          chalk.white(err.code)
-      );
-    return undefined;
-  });
-  let memory: Set<string> = new Set(topTkns || []);
-
-  const results = await limitedBatchProcessor(
-    sources.map((source) =>
-      getSource(source, randomUUID()).then(({ content, runId }) => {
-        if (content) {
-          const timedParse = withTimer(() => parse(content!, memory, runId));
-          const { result, duration } = timedParse();
-
-          process.env.VERBOSE?.toLowerCase() === "true" &&
-            console.log(
-              chalk.yellowBright("[PARSING]") +
-                chalk.blueBright(`[${runId}]`) +
-                chalk.magentaBright("[PARSED]") +
-                chalk.white(
-                  result.opct +
-                    " ops | " +
-                    String(
-                      Math.round((result.opct / duration / duration) * 10000) /
-                        10000
-                    ) +
-                    " ops/ms"
-                )
-            );
-
-          return result;
-        } else {
-          return { parsed: undefined, runId, opct: 0 };
-        }
-      })
-    ),
-    5,
-    async (batchResults) => {
-      if (!batchResults) return;
-      await syncBatch(batchResults, driver);
-    }
-  );
-
-  return { results, memory };
-}
 
 async function main() {
   const driver = neo4j.driver(
@@ -96,22 +11,12 @@ async function main() {
     neo4j.auth.basic(process.env.NEOUSER!, process.env.NEOPASS!)
   );
 
-  const sources: Source[] = [
-    { type: SourceType.wiki, identifier: "Operator_algebra" },
-    { type: SourceType.wiki, identifier: "API" },
-    { type: SourceType.wiki, identifier: "Zach_Garrett" },
-    { type: SourceType.wiki, identifier: "Archery" },
-    { type: SourceType.wiki, identifier: "Art" },
-    // { type: SourceType.doc, identifier: "./package-lock.json" },
-    // { type: SourceType.doc, identifier: "./package.json" },
-    // { type: SourceType.doc, identifier: "./tsconfig.json" },
-  ];
+  const server = net.createServer((socket) => handleStream(socket, driver));
 
-  try {
-    const res = await readSources(driver, sources);
-  } finally {
-    await driver.close();
-  }
+  const PORT = process.env.PORT || 3000;
+  server.listen(PORT, () => {
+    console.log(`TCP server listening on port ${PORT}`);
+  });
 }
 
 main().catch(console.error);

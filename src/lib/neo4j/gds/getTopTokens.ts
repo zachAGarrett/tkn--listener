@@ -1,6 +1,6 @@
 import { writeFileSync } from "fs";
 import { Driver } from "neo4j-driver";
-import { decode } from "../../parse.js";
+import { decode } from "../../../util/index.js";
 
 export async function getTopTkns(driver: Driver, topPct: number) {
   const session = driver.session();
@@ -8,7 +8,7 @@ export async function getTopTkns(driver: Driver, topPct: number) {
   // Start a transaction
   const tx = session.beginTransaction();
   try {
-    // Step 1: Project the graph
+    // Project the graph
     await tx.run(`
       MATCH (source:Tkn)-[r:D1]->(target:Tkn)
       RETURN gds.graph.project(
@@ -19,18 +19,7 @@ export async function getTopTkns(driver: Driver, topPct: number) {
       )
     `);
 
-    // Step 2: Estimate memory requirements for PageRank
-    // await tx.run(`
-    //   CALL gds.pageRank.write.estimate('tkns', {
-    //     writeProperty: 'pageRank',
-    //     maxIterations: 20,
-    //     dampingFactor: 0.85
-    //   })
-    //   YIELD nodeCount, relationshipCount, bytesMin, bytesMax, requiredMemory
-    //   RETURN *
-    // `);
-
-    // Step 3: Execute the PageRank algorithm and return top percentage tokens
+    // Execute the PageRank algorithm and return top percentage tokens
     const topTokensResult = await tx.run(
       `
       CALL gds.pageRank.stream('tkns', {

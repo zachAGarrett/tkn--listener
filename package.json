@@ -9,8 +9,7 @@
     "clean": "rm -rf build",
     "build": "npm run clean && tsc",
     "start": "node build/index.js",
-    "watch": "tsc --watch",
-    "assistant:chat": "node build/util/build/codeAssistant/cli/index.js ./src \"**/*.ts\""
+    "watch": "tsc --watch"
   },
   "author": "Zach Garrett",
   "license": "ISC",
