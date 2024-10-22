@@ -128,7 +128,6 @@ export async function handleStream(
 
       dataLength = data.length;
 
-      // console.log(data);
       for (let i = 0; i < dataLength; i++) {
         const segment = data[i];
         if (segment === undefined) continue;
@@ -170,7 +169,7 @@ export async function handleStream(
       await pushMergedTokens();
     }
 
-    console.log("Stream ended");
+    console.log(chalk.greenBright("Stream ended"));
   });
 
   socket.on("error", (err: Error) => {
