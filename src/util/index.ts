@@ -4,7 +4,7 @@ export type Tkn = string;
 export function parseBuffer(chunk: Buffer): number[] {
   const numbers: number[] = [];
   for (let i = 0; i < chunk.length; i += 4) {
-    const num = chunk.readInt32LE(i); // Read as 32-bit little-endian integer
+    const num = chunk.readUint8(i);
     numbers.push(num);
   }
   return numbers;

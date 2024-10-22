@@ -1,6 +1,6 @@
 import { writeFileSync } from "fs";
-import { Driver } from "neo4j-driver";
-import { decode } from "../../../util/index.js";
+import { Driver, Neo4jError } from "neo4j-driver";
+import { decode, Tkn } from "../../../util/index.js";
 
 export async function getTopTkns(driver: Driver, topPct: number) {
   const session = driver.session();
@@ -9,7 +9,8 @@ export async function getTopTkns(driver: Driver, topPct: number) {
   const tx = session.beginTransaction();
   try {
     // Project the graph
-    await tx.run(`
+    await tx.run(
+      `
       MATCH (source:Tkn)-[r:D1]->(target:Tkn)
       RETURN gds.graph.project(
         'tkns',
@@ -17,7 +18,8 @@ export async function getTopTkns(driver: Driver, topPct: number) {
         target,
         { relationshipProperties: r { .idx } }
       )
-    `);
+    `
+    );
 
     // Execute the PageRank algorithm and return top percentage tokens
     const topTokensResult = await tx.run(
@@ -35,7 +37,7 @@ export async function getTopTkns(driver: Driver, topPct: number) {
     );
 
     // Get the top tokens from the result
-    const topTkns: string[] = topTokensResult.records[0].get("topTkns") || [];
+    const topTkns: Tkn[] = topTokensResult.records[0].get("topTkns") || [];
 
     // Step 4: Drop the graph
     await tx.run(`CALL gds.graph.drop('tkns')`);
@@ -63,6 +65,7 @@ export async function getTopTkns(driver: Driver, topPct: number) {
     return topTkns;
   } catch (error) {
     await tx.rollback();
+    console.log((error as Neo4jError).message);
     throw error; // Rethrow the error after rollback for further handling if needed
   } finally {
     await session.close();

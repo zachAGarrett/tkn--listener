@@ -24,10 +24,19 @@ export async function handleStream(
 
   // function to refresh the bank
   async function refreshBank() {
+    const opId = randomUUID();
+    process.env.VERBOSE?.toLowerCase() === "true" &&
+      console.log(
+        `[${chalk.blueBright(opId)}]: ${chalk.magentaBright("Refreshing bank")}`
+      );
     try {
       const topTkns = await getTopTkns(driver, 0.2);
       bank = new Set(topTkns);
       bankReady = true;
+      process.env.VERBOSE?.toLowerCase() === "true" &&
+        console.log(
+          `[${chalk.blueBright(opId)}]: ${chalk.greenBright("Bank refreshed")}`
+        );
     } catch (err) {
       process.env.VERBOSE?.toLowerCase() === "true" &&
         console.error(
@@ -36,11 +45,23 @@ export async function handleStream(
             chalk.white((err as Neo4jError).code)
         );
       bankReady = true;
+      process.env.VERBOSE?.toLowerCase() === "true" &&
+        console.log(
+          `[${chalk.blueBright(opId)}]: ${chalk.redBright(
+            "Failed to refresh bank"
+          )}`
+        );
     }
   }
 
-  // function to push the merged tokens to the remote
-  async function pushMerged() {
+  async function pushMergedTokens() {
+    const opId = randomUUID();
+    process.env.VERBOSE?.toLowerCase() === "true" &&
+      console.log(
+        `[${chalk.blueBright(opId)}]: ${chalk.magentaBright(
+          `Pushing ${chalk.yellowBright(merged.length)} tokens`
+        )}`
+      );
     pushing = true;
     const session = driver.session(); // Create a new session
     // Create a transaction to push the tokens and their adjacency
@@ -55,21 +76,39 @@ export async function handleStream(
         const tkn2 = merged[0]!;
         await tx.run(
           `
-            MERGE (a:Tkn {value: $tkn1v})
-            MERGE (b:Tkn {value: $tkn2v})
-            CREATE (t1)-[:D1 {idx: $tkn1idx, sid: $sessionId}]->(t2)
+            MERGE (tkn1:Tkn {value: $tkn1v})
+            MERGE (tkn2:Tkn {value: $tkn2v})
+            MERGE (tkn1)-[:D1 {idx: $tkn1idx, sid: $sessionId}]->(tkn2)
           `,
-          { sessionId, tkn1v: tkn1.value, tkn2v: tkn2.value, tkn1idx: tkn1.idx }
+          {
+            sessionId,
+            tkn1v: tkn1.value,
+            tkn2v: tkn2.value,
+            tkn1idx: tkn1.idx,
+          }
         );
       }
       await tx.commit();
     } catch (error) {
+      process.env.VERBOSE?.toLowerCase() === "true" &&
+        console.log(
+          `[${chalk.blueBright(opId)}]: ${chalk.redBright(
+            "Error pushing merged tokens:",
+            error
+          )}`
+        );
       console.error("Error pushing merged tokens:", error);
       await tx.rollback();
       throw error;
     } finally {
       await session.close(); // Ensure the session is closed
       pushing = false;
+      process.env.VERBOSE?.toLowerCase() === "true" &&
+        console.log(
+          `[${chalk.blueBright(opId)}]: ${chalk.greenBright(
+            `Finished pushing tokens`
+          )}`
+        );
     }
   }
 
@@ -79,7 +118,6 @@ export async function handleStream(
 
   socket.on("data", async (chunk: Buffer) => {
     queue.push(chunk);
-    console.log(bankReady);
 
     if (!bankReady) {
       // Defer processing chunks until the bank is ready
@@ -89,6 +127,8 @@ export async function handleStream(
       const data = parseBuffer(queue.shift()!); // There will always be a chunk in the queue
 
       dataLength = data.length;
+
+      // console.log(data);
       for (let i = 0; i < dataLength; i++) {
         const segment = data[i];
         if (segment === undefined) continue;
@@ -99,7 +139,14 @@ export async function handleStream(
         if (bank.size > bankSize) {
           // Adding the token increased the size of the set, so we know it was new
           if (window.length > 1) {
-            merged.push({ value: encode(window.slice(0, -1)), idx: tknCount }); // Add the previous token
+            const knownTkn = encode(window.slice(0, -1));
+            process.env.VERBOSE?.toLowerCase() === "true" &&
+              console.log(
+                `${chalk.magentaBright("Known pattern:")} ${chalk.yellowBright(
+                  knownTkn
+                )}`
+              );
+            merged.push({ value: knownTkn, idx: tknCount }); // Add the previous token
             tknCount += 1;
           }
           window = [segment]; // Reset window to current segment
@@ -107,7 +154,9 @@ export async function handleStream(
       }
 
       if (merged.length > 20 && pushing === false) {
-        await pushMerged();
+        await pushMergedTokens()
+          .then(async () => await refreshBank())
+          .catch((error) => console.error(error));
       }
     }
   });
@@ -119,7 +168,7 @@ export async function handleStream(
     }
 
     if (pushing === false) {
-      await pushMerged();
+      await pushMergedTokens();
     }
 
     console.log("Stream ended");
