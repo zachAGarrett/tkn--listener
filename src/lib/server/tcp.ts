@@ -149,7 +149,10 @@ export async function handleStream(
         }
       }
 
-      if (merged.length > 20 && pushing === false) {
+      if (
+        merged.length > Number(process.env.PUSHAT || 20) &&
+        pushing === false
+      ) {
         pushMergedTokens()
           .then(async () => refreshBank())
           .catch((error) => console.error(error));
