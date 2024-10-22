@@ -10,9 +10,9 @@ export async function handleStream(
   socket: net.Socket,
   driver: Driver
 ): Promise<void> {
-  // Set up the variables for this socket conection
+  // Set up the variables for this socket connection
   const merged: { value: Tkn; idx: number }[] = [];
-  const queue: Buffer[] = [];
+  const queue: { chunk: Buffer; resolve: Function }[] = []; // Queue to store incoming data chunks
   const sessionId: UUID = randomUUID();
   let bank: Set<Tkn> = new Set();
   let window: number[] = [];
@@ -21,6 +21,7 @@ export async function handleStream(
   let tknCount: number = 0;
   let bankReady = false;
   let pushing = false;
+  let working = false; // Flag to track if the worker is processing
 
   // function to refresh the bank
   async function refreshBank() {
@@ -68,9 +69,8 @@ export async function handleStream(
     const tx = session.beginTransaction();
     try {
       while (merged.length) {
-        // Check if we have at least two tokens to process
         if (merged.length < 2) {
-          break; // Not enough tokens to push
+          break;
         }
         const tkn1 = merged.shift()!;
         const tkn2 = merged[0]!;
@@ -112,19 +112,11 @@ export async function handleStream(
     }
   }
 
-  console.log("New user connected from:", socket.remoteAddress);
-  // Handle the connection
-  refreshBank();
-
-  socket.on("data", async (chunk: Buffer) => {
-    queue.push(chunk);
-
-    if (!bankReady) {
-      // Defer processing chunks until the bank is ready
-      return;
-    } else {
-      // Process the enqueued chunks
-      const data = parseBuffer(queue.shift()!); // There will always be a chunk in the queue
+  // Worker function to process tasks from the queue
+  async function worker() {
+    while (queue.length) {
+      const { chunk, resolve } = queue.shift()!; // Get the next task
+      const data = parseBuffer(chunk);
 
       dataLength = data.length;
 
@@ -136,7 +128,6 @@ export async function handleStream(
         bankSize = bank.size;
         bank.add(encode(window));
         if (bank.size > bankSize) {
-          // Adding the token increased the size of the set, so we know it was new
           if (window.length > 1) {
             const knownTkn = encode(window.slice(0, -1));
             process.env.VERBOSE?.toLowerCase() === "true" &&
@@ -152,11 +143,34 @@ export async function handleStream(
         merged.length > Number(process.env.PUSHAT || 20) &&
         pushing === false
       ) {
-        pushMergedTokens()
+        await pushMergedTokens()
           .then(async () => refreshBank())
           .catch((error) => console.error(error));
       }
+
+      resolve(); // Mark this task as done
     }
+    working = false; // Mark worker as idle
+  }
+
+  // Queue a new task and ensure the worker is running
+  function enqueueTask(chunk: Buffer) {
+    return new Promise<void>((resolve) => {
+      queue.push({ chunk, resolve });
+      if (!working) {
+        working = true;
+        worker(); // Start the worker if it's not already running
+      }
+    });
+  }
+
+  console.log("New user connected from:", socket.remoteAddress);
+  // Handle the connection
+  refreshBank();
+
+  socket.on("data", async (chunk: Buffer) => {
+    // Queue the data processing task
+    await enqueueTask(chunk);
   });
 
   socket.on("end", async () => {
@@ -165,11 +179,18 @@ export async function handleStream(
       merged.push({ value: encode(window), idx: tknCount });
     }
 
-    if (pushing === false) {
-      await pushMergedTokens();
-    }
+    // Wait for all queued tasks to finish
+    await new Promise<void>((resolve) => {
+      const interval = setInterval(async () => {
+        if (!working && queue.length === 0) {
+          clearInterval(interval);
+          await pushMergedTokens(); // Ensure any remaining tokens are pushed
+          resolve();
+        }
+      }, 100); // Check every 100ms if the worker has finished
+    });
 
-    console.log(chalk.greenBright("Stream ended"));
+    console.log(chalk.greenBright("Stream ended and all tokens pushed."));
   });
 
   socket.on("error", (err: Error) => {
