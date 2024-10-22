@@ -141,11 +141,7 @@ export async function handleStream(
           if (window.length > 1) {
             const knownTkn = encode(window.slice(0, -1));
             process.env.VERBOSE?.toLowerCase() === "true" &&
-              console.log(
-                `${chalk.magentaBright("Known pattern:")} ${chalk.yellowBright(
-                  knownTkn
-                )}`
-              );
+              console.log(chalk.yellowBright(knownTkn));
             merged.push({ value: knownTkn, idx: tknCount }); // Add the previous token
             tknCount += 1;
           }
@@ -154,8 +150,8 @@ export async function handleStream(
       }
 
       if (merged.length > 20 && pushing === false) {
-        await pushMergedTokens()
-          .then(async () => await refreshBank())
+        pushMergedTokens()
+          .then(async () => refreshBank())
           .catch((error) => console.error(error));
       }
     }
