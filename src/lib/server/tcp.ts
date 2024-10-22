@@ -3,7 +3,7 @@ import { getTopTkns } from "../neo4j/gds/getTopTokens.js";
 import { Driver, Neo4jError } from "neo4j-driver";
 import chalk from "chalk";
 import { randomUUID, UUID } from "crypto";
-import { encode, parseBuffer, Tkn } from "../../util/index.js";
+import { encode, parseChunk, Tkn } from "../../util/index.js";
 
 // Function to handle incoming stream data over TCP
 export async function handleStream(
@@ -116,7 +116,7 @@ export async function handleStream(
   async function worker() {
     while (queue.length) {
       const { chunk, resolve } = queue.shift()!; // Get the next task
-      const data = parseBuffer(chunk);
+      const data = parseChunk(chunk);
 
       dataLength = data.length;
 
@@ -174,6 +174,7 @@ export async function handleStream(
   });
 
   socket.on("end", async () => {
+    socket.write(sessionId);
     // Push any remaining window after the connection ends
     if (window.length) {
       merged.push({ value: encode(window), idx: tknCount });

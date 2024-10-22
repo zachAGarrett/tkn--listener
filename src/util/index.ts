@@ -1,7 +1,7 @@
 export type Tkn = string;
 
 // Function to parse numerical data from a buffer (assuming 32-bit integers)
-export function parseBuffer(chunk: Buffer): number[] {
+export function parseChunk(chunk: Buffer): number[] {
   const numbers: number[] = [];
   for (let i = 0; i < chunk.length; i += 4) {
     const num = chunk.readUint8(i);
