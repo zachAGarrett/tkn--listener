@@ -1,3 +1,5 @@
+import chalk from "chalk";
+
 export type Tkn = string;
 
 // Function to parse numerical data from a buffer (assuming 32-bit integers)
@@ -25,4 +27,14 @@ export function decode(encodedString: Tkn): number[] {
     numbers.push(buffer.readInt32LE(i)); // Read each number back
   }
   return numbers;
+}
+
+export function log(message: string, level: "info" | "success" | "error") {
+  if (process.env.VERBOSE?.toLowerCase() !== "true") return;
+  const colors = {
+    info: chalk.blueBright,
+    success: chalk.greenBright,
+    error: chalk.redBright,
+  };
+  console.log(colors[level](message));
 }

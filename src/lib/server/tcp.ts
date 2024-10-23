@@ -1,77 +1,58 @@
 import net from "net";
 import { getTopTkns } from "../neo4j/gds/getTopTokens.js";
 import { Driver, Neo4jError } from "neo4j-driver";
-import chalk from "chalk";
 import { randomUUID, UUID } from "crypto";
-import { encode, parseChunk, Tkn } from "../../util/index.js";
+import { encode, log, parseChunk, Tkn } from "../../util/index.js";
 
 // Function to handle incoming stream data over TCP
 export async function handleStream(
   socket: net.Socket,
   driver: Driver
 ): Promise<void> {
-  // Set up the variables for this socket connection
+  // Set up variables for this socket connection
   const merged: { value: Tkn; idx: number }[] = [];
-  const queue: { chunk: Buffer; resolve: Function }[] = []; // Queue to store incoming data chunks
+  const queue: {
+    chunk: Buffer;
+    resolve: (value: void | PromiseLike<void>) => any;
+  }[] = [];
   const sessionId: UUID = randomUUID();
+  const workers: Promise<void>[] = [];
   let bank: Set<Tkn> = new Set();
   let window: number[] = [];
-  let dataLength: number = 0;
-  let bankSize: number = 0;
-  let tknCount: number = 0;
-  let bankReady = false;
+  let dataLength = 0;
+  let tokenIdx = 0;
+  let bankReady = true;
   let pushing = false;
-  let working = false; // Flag to track if the worker is processing
+  let working = false;
 
-  // function to refresh the bank
+  // Function to refresh the token bank
   async function refreshBank() {
+    bankReady = false;
     const opId = randomUUID();
-    process.env.VERBOSE?.toLowerCase() === "true" &&
-      console.log(
-        `[${chalk.blueBright(opId)}]: ${chalk.magentaBright("Refreshing bank")}`
-      );
+    log(`[${opId}]: Refreshing bank...`, "info");
     try {
-      const topTkns = await getTopTkns(driver, 0.2);
-      bank = new Set(topTkns);
+      bank = new Set(await getTopTkns(driver, 0.2));
+      log(`[${opId}]: Bank refreshed.`, "success");
       bankReady = true;
-      process.env.VERBOSE?.toLowerCase() === "true" &&
-        console.log(
-          `[${chalk.blueBright(opId)}]: ${chalk.greenBright("Bank refreshed")}`
-        );
     } catch (err) {
-      process.env.VERBOSE?.toLowerCase() === "true" &&
-        console.error(
-          chalk.yellowBright("[GETTING TOP TKNS]") +
-            chalk.red("[FAIL]") +
-            chalk.white((err as Neo4jError).code)
-        );
+      log(
+        `[${opId}]: Failed to refresh bank. Code: ${(err as Neo4jError).code}`,
+        "error"
+      );
       bankReady = true;
-      process.env.VERBOSE?.toLowerCase() === "true" &&
-        console.log(
-          `[${chalk.blueBright(opId)}]: ${chalk.redBright(
-            "Failed to refresh bank"
-          )}`
-        );
     }
   }
 
+  // Function to push merged tokens to Neo4j
   async function pushMergedTokens() {
     const opId = randomUUID();
-    process.env.VERBOSE?.toLowerCase() === "true" &&
-      console.log(
-        `[${chalk.blueBright(opId)}]: ${chalk.magentaBright(
-          `Pushing ${chalk.yellowBright(merged.length)} tokens`
-        )}`
-      );
+    log(`[${opId}]: Pushing ${merged.length} tokens...`, "info");
     pushing = true;
-    const session = driver.session(); // Create a new session
-    // Create a transaction to push the tokens and their adjacency
+    const session = driver.session();
     const tx = session.beginTransaction();
+
     try {
-      while (merged.length) {
-        if (merged.length < 2) {
-          break;
-        }
+      while (merged.length >= 2) {
         const tkn1 = merged.shift()!;
         const tkn2 = merged[0]!;
         await tx.run(
@@ -80,121 +61,100 @@ export async function handleStream(
             MERGE (tkn2:Tkn {value: $tkn2v})
             MERGE (tkn1)-[:D1 {idx: $tkn1idx, sid: $sessionId}]->(tkn2)
           `,
-          {
-            sessionId,
-            tkn1v: tkn1.value,
-            tkn2v: tkn2.value,
-            tkn1idx: tkn1.idx,
-          }
+          { sessionId, tkn1v: tkn1.value, tkn2v: tkn2.value, tkn1idx: tkn1.idx }
         );
       }
       await tx.commit();
+      log(`[${opId}]: Tokens pushed successfully.`, "success");
     } catch (error) {
-      process.env.VERBOSE?.toLowerCase() === "true" &&
-        console.log(
-          `[${chalk.blueBright(opId)}]: ${chalk.redBright(
-            "Error pushing merged tokens:",
-            error
-          )}`
-        );
-      console.error("Error pushing merged tokens:", error);
+      log(
+        `[${opId}]: Error pushing tokens: ${(error as any).message}`,
+        "error"
+      );
       await tx.rollback();
-      throw error;
     } finally {
-      await session.close(); // Ensure the session is closed
+      await session.close();
       pushing = false;
-      process.env.VERBOSE?.toLowerCase() === "true" &&
-        console.log(
-          `[${chalk.blueBright(opId)}]: ${chalk.greenBright(
-            `Finished pushing tokens`
-          )}`
-        );
     }
   }
 
   // Worker function to process tasks from the queue
   async function worker() {
-    while (queue.length) {
-      const { chunk, resolve } = queue.shift()!; // Get the next task
-      const data = parseChunk(chunk);
+    if (working) return; // Early exit if another worker is already processing
+    working = true; // Claim the worker slot
 
-      dataLength = data.length;
+    try {
+      while (queue.length) {
+        const tasks = queue.splice(0)!;
+        const data: number[] = [];
+        const resolutions: ((value: void | PromiseLike<void>) => any)[] = [];
 
-      for (let i = 0; i < dataLength; i++) {
-        const segment = data[i];
-        if (segment === undefined) continue;
-        window.push(segment);
-
-        bankSize = bank.size;
-        bank.add(encode(window));
-        if (bank.size > bankSize) {
-          if (window.length > 1) {
-            const knownTkn = encode(window.slice(0, -1));
-            process.env.VERBOSE?.toLowerCase() === "true" &&
-              console.log(chalk.yellowBright(knownTkn));
-            merged.push({ value: knownTkn, idx: tknCount }); // Add the previous token
-            tknCount += 1;
-          }
-          window = [segment]; // Reset window to current segment
+        for (const { chunk, resolve } of tasks) {
+          data.push(...parseChunk(chunk));
+          resolutions.push(resolve);
         }
-      }
 
-      if (
-        merged.length > Number(process.env.PUSHAT || 20) &&
-        pushing === false
-      ) {
-        await pushMergedTokens()
-          .then(async () => refreshBank())
-          .catch((error) => console.error(error));
-      }
+        dataLength = data.length;
 
-      resolve(); // Mark this task as done
+        for (let i = 0; i < dataLength; i++) {
+          const segment = data[i];
+          window.push(segment);
+
+          const bankSize = bank.size;
+          bank.add(encode(window));
+
+          if (bank.size > bankSize) {
+            const knownTkn = encode(window.slice(0, -1));
+            merged.push({ value: knownTkn, idx: tokenIdx });
+            window = [segment]; // Reset window to only the current segment
+            tokenIdx += 1;
+          }
+        }
+
+        if (merged.length > Number(process.env.PUSHAT || 20) && !pushing) {
+          await pushMergedTokens().then(refreshBank).catch(console.error);
+        }
+
+        await Promise.all(resolutions); // Resolve all tasks
+      }
+    } finally {
+      working = false; // Release the worker slot
     }
-    working = false; // Mark worker as idle
   }
 
   // Queue a new task and ensure the worker is running
   function enqueueTask(chunk: Buffer) {
     return new Promise<void>((resolve) => {
       queue.push({ chunk, resolve });
-      if (!working) {
-        working = true;
-        worker(); // Start the worker if it's not already running
+      if (!working && bankReady) {
+        workers.push(worker());
       }
     });
   }
 
-  console.log("New user connected from:", socket.remoteAddress);
-  // Handle the connection
+  // Event: New user connected
+  console.log(`New user connected from: ${socket.remoteAddress}`);
   refreshBank();
 
-  socket.on("data", async (chunk: Buffer) => {
-    // Queue the data processing task
-    await enqueueTask(chunk);
-  });
+  socket.on("data", (chunk: Buffer) => enqueueTask(chunk));
 
   socket.on("end", async () => {
     socket.write(sessionId);
-    // Push any remaining window after the connection ends
-    if (window.length) {
-      merged.push({ value: encode(window), idx: tknCount });
-    }
+    if (window.length)
+      merged.push({ value: encode(window), idx: merged.length });
 
-    // Wait for all queued tasks to finish
-    await new Promise<void>((resolve) => {
-      const interval = setInterval(async () => {
-        if (!working && queue.length === 0) {
-          clearInterval(interval);
-          await pushMergedTokens(); // Ensure any remaining tokens are pushed
-          resolve();
-        }
-      }, 100); // Check every 100ms if the worker has finished
+    await Promise.all(workers);
+    await new Promise<void>(async (resolve) => {
+      if (!working && queue.length === 0) {
+        await pushMergedTokens();
+        resolve();
+      }
     });
 
-    console.log(chalk.greenBright("Stream ended and all tokens pushed."));
+    log("Stream ended. All tokens pushed.", "success");
   });
 
   socket.on("error", (err: Error) => {
-    console.error("Error during stream:", err);
+    log(`Error during stream: ${err.message}`, "error");
   });
 }
