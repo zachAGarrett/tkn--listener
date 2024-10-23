@@ -29,12 +29,27 @@ export function decode(encodedString: Tkn): number[] {
   return numbers;
 }
 
-export function log(message: string, level: "info" | "success" | "error") {
+export function log(
+  sessionId: string,
+  opId: string | undefined,
+  message: string,
+  level: "info" | "success" | "error"
+) {
   if (process.env.VERBOSE?.toLowerCase() !== "true") return;
   const colors = {
     info: chalk.blueBright,
     success: chalk.greenBright,
     error: chalk.redBright,
   };
-  console.log(colors[level](message));
+  console.log(
+    `[${chalk.yellowBright(sessionId)}]${
+      opId ? `[${chalk.magentaBright(opId)}]` : ""
+    }: ${colors[level](message)}`
+  );
+}
+
+export function bpiTokbps(bytes: number, intervalMs: number): number {
+  const kilobytes = bytes / 1024;
+  const intervalsPerSecond = 1000 / intervalMs;
+  return kilobytes * intervalsPerSecond;
 }

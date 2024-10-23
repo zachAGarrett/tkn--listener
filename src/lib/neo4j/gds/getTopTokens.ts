@@ -2,7 +2,7 @@ import { writeFileSync } from "fs";
 import { Driver, Neo4jError } from "neo4j-driver";
 import { decode, Tkn } from "../../../util/index.js";
 
-export async function getTopTkns(driver: Driver, topPct: number) {
+export async function getTopTkns(driver: Driver, percentile: number) {
   const session = driver.session();
 
   // Start a transaction
@@ -21,7 +21,7 @@ export async function getTopTkns(driver: Driver, topPct: number) {
     `
     );
 
-    // Execute the PageRank algorithm and return top percentage tokens
+    // Execute the PageRank algorithm and calculate the percentile for the top tokens
     const topTokensResult = await tx.run(
       `
       CALL gds.pageRank.stream('tkns', {
@@ -29,11 +29,12 @@ export async function getTopTkns(driver: Driver, topPct: number) {
       })
       YIELD nodeId, score
       WITH gds.util.asNode(nodeId).value AS tkn, score
-      ORDER BY score DESC
-      WITH COLLECT(tkn) AS tokens, COUNT(*) AS total
-      RETURN tokens[0..TOINTEGER(CEIL(total * $topPct))] AS topTkns
+      WITH tkn, score,
+        percentileDisc(score, $percentile) AS percentile
+      WHERE score >= percentile
+      RETURN COLLECT(tkn) AS topTkns
     `,
-      { topPct }
+      { percentile }
     );
 
     // Get the top tokens from the result
@@ -65,7 +66,6 @@ export async function getTopTkns(driver: Driver, topPct: number) {
     return topTkns;
   } catch (error) {
     await tx.rollback();
-    console.log((error as Neo4jError).message);
     throw error; // Rethrow the error after rollback for further handling if needed
   } finally {
     await session.close();
