@@ -3,8 +3,14 @@ import { getTopTkns } from "../neo4j/gds/getTopTokens.js";
 import { Driver, Neo4jError } from "neo4j-driver";
 import { randomUUID, UUID } from "crypto";
 import { performance } from "perf_hooks"; // Node.js built-in module
-
-import { bpiTokbps, encode, log, parseChunk, Tkn } from "../../util/index.js";
+import {
+  bpiToMbps,
+  encode,
+  log,
+  parseChunk,
+  Tkn,
+  RunningStats,
+} from "../../util/index.js";
 import chalk from "chalk";
 
 // Function to handle incoming stream data over TCP
@@ -20,13 +26,13 @@ export async function handleStream(
   }[] = [];
   const sessionId: UUID = randomUUID();
   const workers: Promise<void>[] = [];
+  const throughputStats = new RunningStats();
   let pushOp: Promise<void> | undefined = undefined;
   let syncOp: Promise<void> | undefined = undefined;
   let bank: Set<Tkn> = new Set();
   let window: number[] = [];
   let dataLength = 0;
   let tokenIdx = 0;
-  let bankReady = true;
   let working = false;
 
   // Function to refresh the token bank
@@ -133,10 +139,12 @@ export async function handleStream(
       await Promise.all(resolutions); // Resolve all tasks
       duration = performance.now() - start;
       bytes = tasks.reduce((sum, { chunk }) => sum + chunk.length, 0);
+      const throughput = bpiToMbps(bytes, duration);
+      throughputStats.add(throughput, duration);
       log(
         sessionId,
         undefined,
-        `${bpiTokbps(bytes, duration).toFixed(2)}kb/s`,
+        `${throughput.toFixed(2)} ${chalk.gray("MB/s")}`,
         "info"
       );
     } finally {
@@ -156,7 +164,9 @@ export async function handleStream(
 
   // Event: New user connected
   console.log(`New user connected from: ${socket.remoteAddress}`);
+
   socket.write(sessionId);
+
   syncOp = syncBank();
 
   socket.on("data", (chunk: Buffer) => enqueueTask(chunk));
@@ -169,10 +179,26 @@ export async function handleStream(
     if (merged.length) {
       if (pushOp) {
         await pushOp;
+      } else {
+        await pushTokens();
       }
-      await pushTokens();
     }
     log(sessionId, undefined, "Stream ended. All tokens pushed.", "success");
+    log(
+      sessionId,
+      undefined,
+      `${[
+        `${throughputStats.getMin()?.toFixed(2)} ${chalk.gray("min")}`,
+        `${throughputStats.getStandardDeviation()!.toFixed(2)} ${chalk.gray(
+          "std"
+        )}`,
+        `${throughputStats.getMax()?.toFixed(2)} ${chalk.gray("max")}`,
+        `${throughputStats.getWeightedAverage().toFixed(2)} ${chalk.gray(
+          "mean"
+        )}`,
+      ].join(chalk.redBright(" | "))} ${chalk.gray("MB/s")}`,
+      "info"
+    );
   });
 
   socket.on("error", (err: Error) => {
