@@ -95,9 +95,9 @@ export class RunningStats {
   }
 
   // Get current weighted average
-  getWeightedAverage(): number {
+  getWeightedAverage(): number | null {
     if (this.totalWeight === 0) {
-      throw new Error("No data points added yet.");
+      return null;
     }
     return this.totalWeightedSum / this.totalWeight;
   }

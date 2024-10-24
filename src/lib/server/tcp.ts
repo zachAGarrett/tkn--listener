@@ -193,7 +193,7 @@ export async function handleStream(
           "std"
         )}`,
         `${throughputStats.getMax()?.toFixed(2)} ${chalk.gray("max")}`,
-        `${throughputStats.getWeightedAverage().toFixed(2)} ${chalk.gray(
+        `${throughputStats.getWeightedAverage()?.toFixed(2)} ${chalk.gray(
           "mean"
         )}`,
       ].join(chalk.redBright(" | "))} ${chalk.gray("MB/s")}`,
