@@ -1,15 +1,16 @@
 import { writeFileSync } from "fs";
 import { Driver } from "neo4j-driver";
-import { decode } from "../../parse.js";
+import { decode, EncodedToken, PlaintextTkn } from "../../../util/index.js";
 
-export async function getTopTkns(driver: Driver, topPct: number) {
+export async function getTopTkns(driver: Driver, percentile: number) {
   const session = driver.session();
 
   // Start a transaction
   const tx = session.beginTransaction();
   try {
-    // Step 1: Project the graph
-    await tx.run(`
+    // Project the graph
+    await tx.run(
+      `
       MATCH (source:Tkn)-[r:D1]->(target:Tkn)
       RETURN gds.graph.project(
         'tkns',
@@ -17,20 +18,10 @@ export async function getTopTkns(driver: Driver, topPct: number) {
         target,
         { relationshipProperties: r { .idx } }
       )
-    `);
+    `
+    );
 
-    // Step 2: Estimate memory requirements for PageRank
-    // await tx.run(`
-    //   CALL gds.pageRank.write.estimate('tkns', {
-    //     writeProperty: 'pageRank',
-    //     maxIterations: 20,
-    //     dampingFactor: 0.85
-    //   })
-    //   YIELD nodeCount, relationshipCount, bytesMin, bytesMax, requiredMemory
-    //   RETURN *
-    // `);
-
-    // Step 3: Execute the PageRank algorithm and return top percentage tokens
+    // Execute the PageRank algorithm and calculate the percentile for the top tokens
     const topTokensResult = await tx.run(
       `
       CALL gds.pageRank.stream('tkns', {
@@ -38,15 +29,17 @@ export async function getTopTkns(driver: Driver, topPct: number) {
       })
       YIELD nodeId, score
       WITH gds.util.asNode(nodeId).value AS tkn, score
-      ORDER BY score DESC
-      WITH COLLECT(tkn) AS tokens, COUNT(*) AS total
-      RETURN tokens[0..TOINTEGER(CEIL(total * $topPct))] AS topTkns
+      WITH tkn, score,
+        percentileDisc(score, $percentile) AS percentile
+      WHERE score >= percentile
+      RETURN COLLECT(tkn) AS topTkns
     `,
-      { topPct }
+      { percentile }
     );
 
     // Get the top tokens from the result
-    const topTkns: string[] = topTokensResult.records[0].get("topTkns") || [];
+    const topTkns: EncodedToken[] =
+      topTokensResult.records[0].get("topTkns") || [];
 
     // Step 4: Drop the graph
     await tx.run(`CALL gds.graph.drop('tkns')`);
@@ -59,10 +52,11 @@ export async function getTopTkns(driver: Driver, topPct: number) {
       writeFileSync(
         "./output/topTokens.json",
         JSON.stringify(
-          topTkns.flatMap((tkn) =>
-            decode(tkn)
-              .map((cp) => String.fromCodePoint(cp))
-              .join("")
+          topTkns.flatMap(
+            (tkn) =>
+              decode(tkn)
+                .map((cp) => String.fromCodePoint(cp))
+                .join("") as PlaintextTkn
           ),
           undefined,
           2
