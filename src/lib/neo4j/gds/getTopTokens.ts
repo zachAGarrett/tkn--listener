@@ -1,6 +1,6 @@
 import { writeFileSync } from "fs";
-import { Driver, Neo4jError } from "neo4j-driver";
-import { decode, Tkn } from "../../../util/index.js";
+import { Driver } from "neo4j-driver";
+import { decode, EncodedToken, PlaintextTkn } from "../../../util/index.js";
 
 export async function getTopTkns(driver: Driver, percentile: number) {
   const session = driver.session();
@@ -38,7 +38,8 @@ export async function getTopTkns(driver: Driver, percentile: number) {
     );
 
     // Get the top tokens from the result
-    const topTkns: Tkn[] = topTokensResult.records[0].get("topTkns") || [];
+    const topTkns: EncodedToken[] =
+      topTokensResult.records[0].get("topTkns") || [];
 
     // Step 4: Drop the graph
     await tx.run(`CALL gds.graph.drop('tkns')`);
@@ -51,10 +52,11 @@ export async function getTopTkns(driver: Driver, percentile: number) {
       writeFileSync(
         "./output/topTokens.json",
         JSON.stringify(
-          topTkns.flatMap((tkn) =>
-            decode(tkn)
-              .map((cp) => String.fromCodePoint(cp))
-              .join("")
+          topTkns.flatMap(
+            (tkn) =>
+              decode(tkn)
+                .map((cp) => String.fromCodePoint(cp))
+                .join("") as PlaintextTkn
           ),
           undefined,
           2

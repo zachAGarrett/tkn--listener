@@ -1,6 +1,7 @@
 import chalk from "chalk";
 
-export type Tkn = string;
+export type EncodedToken = string;
+export type PlaintextTkn = string;
 
 // Function to parse numerical data from a buffer (assuming 32-bit integers)
 export function parseChunk(chunk: Buffer): number[] {
@@ -12,7 +13,7 @@ export function parseChunk(chunk: Buffer): number[] {
   return numbers;
 }
 
-export function encode(arr: number[]): Tkn {
+export function encode(arr: number[]): EncodedToken {
   const buffer = Buffer.alloc(arr.length * 4); // 4 bytes for each integer
   for (let i = 0; i < arr.length; i++) {
     buffer.writeInt32LE(arr[i], i * 4); // Store each number as a 32-bit integer
@@ -20,7 +21,7 @@ export function encode(arr: number[]): Tkn {
   return buffer.toString("base64"); // Convert the buffer to a base64 string
 }
 
-export function decode(encodedString: Tkn): number[] {
+export function decode(encodedString: EncodedToken): number[] {
   const buffer = Buffer.from(encodedString, "base64");
   const numbers: number[] = [];
   for (let i = 0; i < buffer.length; i += 4) {

@@ -2,6 +2,7 @@ import net from "net";
 import neo4j from "neo4j-driver";
 import { handleStream } from "./lib/server/tcp.js";
 import dotenv from "dotenv";
+import chalk from "chalk";
 
 dotenv.config();
 
@@ -15,7 +16,7 @@ async function main() {
 
   const PORT = process.env.PORT || 3000;
   server.listen(PORT, () => {
-    console.log(`TCP server listening on port ${PORT}`);
+    console.log(chalk.greenBright(`TCP server listening on port ${PORT}`));
   });
 }
 

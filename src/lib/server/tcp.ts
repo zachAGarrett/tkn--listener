@@ -8,7 +8,7 @@ import {
   encode,
   log,
   parseChunk,
-  Tkn,
+  EncodedToken,
   RunningStats,
 } from "../../util/index.js";
 import chalk from "chalk";
@@ -19,7 +19,7 @@ export async function handleStream(
   driver: Driver
 ): Promise<void> {
   // Set up variables for this socket connection
-  const merged: { value: Tkn; idx: number }[] = [];
+  const merged: { value: EncodedToken; idx: number }[] = [];
   const queue: {
     chunk: Buffer;
     resolve: (value: void | PromiseLike<void>) => any;
@@ -29,10 +29,9 @@ export async function handleStream(
   const throughputStats = new RunningStats();
   let pushOp: Promise<void> | undefined = undefined;
   let syncOp: Promise<void> | undefined = undefined;
-  let bank: Set<Tkn> = new Set();
+  let bank: Set<EncodedToken> = new Set();
   let window: number[] = [];
-  let dataLength = 0;
-  let tokenIdx = 0;
+  let taskCount = 0;
   let working = false;
 
   // Function to refresh the token bank
@@ -96,6 +95,11 @@ export async function handleStream(
     const resolutions: ((value: void | PromiseLike<void>) => any)[] = [];
     let duration: number;
     let bytes: number;
+    let segment: number;
+    let bankSize: number;
+    let throughput: number;
+    let knownTkn: EncodedToken;
+    let tokenIdx = 0;
 
     try {
       for (const { chunk, resolve } of tasks) {
@@ -103,17 +107,16 @@ export async function handleStream(
         resolutions.push(resolve);
       }
 
-      dataLength = data.length;
+      taskCount = data.length;
 
-      for (let i = 0; i < dataLength; i++) {
-        const segment = data[i];
+      for (let i = 0; i < taskCount; i++) {
+        segment = data[i];
         window.push(segment);
-
-        const bankSize = bank.size;
+        bankSize = bank.size;
         bank.add(encode(window));
 
         if (bank.size > bankSize) {
-          const knownTkn = encode(window.slice(0, -1));
+          knownTkn = encode(window.slice(0, -1));
           merged.push({ value: knownTkn, idx: tokenIdx });
           window = [segment]; // Reset window to only the current segment
           tokenIdx += 1;
@@ -139,7 +142,7 @@ export async function handleStream(
       await Promise.all(resolutions); // Resolve all tasks
       duration = performance.now() - start;
       bytes = tasks.reduce((sum, { chunk }) => sum + chunk.length, 0);
-      const throughput = bpiToMbps(bytes, duration);
+      throughput = bpiToMbps(bytes, duration);
       throughputStats.add(throughput, duration);
       log(
         sessionId,
@@ -163,7 +166,12 @@ export async function handleStream(
   }
 
   // Event: New user connected
-  console.log(`New user connected from: ${socket.remoteAddress}`);
+  log(
+    sessionId,
+    undefined,
+    `New user connected from: ${socket.remoteAddress}`,
+    "info"
+  );
 
   socket.write(sessionId);
 
